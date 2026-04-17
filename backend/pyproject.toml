@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "boto3>=1.42.90",
     "pandas>=3.0.2",
     "psycopg2-binary>=2.9.11",
     "pydantic>=2.13.0",
@@ -19,5 +20,5 @@ api = [
 ]
 ingestion = [
     "pandas>=3.0.2",
-    "kaggle",
+    "kaggle>=2.0.1",
 ]

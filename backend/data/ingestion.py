@@ -9,8 +9,7 @@ from core.postgres import engine
 from core.minio import s3_client, ensure_bucket_exists
 from core.config import settings
 
-# Nhớ import Base từ model của bạn
-from models.olist_models import Base 
+from api.models.base import Base
 
 DATASET_NAME = "olistbr/brazilian-ecommerce"
 TEMP_DIR = Path("/tmp/olist_data")
@@ -34,7 +33,7 @@ def check_data_exists() -> bool:
         return False
 
 def download_from_kaggle():
-    print("📥 Đang kết nối Kaggle và tải Dataset (khoảng 43MB)...")
+    print("Đang kết nối Kaggle và tải Dataset ...")
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
     
     # Khởi tạo API Kaggle (tự động đọc KAGGLE_USERNAME và KAGGLE_KEY từ env)
@@ -42,7 +41,7 @@ def download_from_kaggle():
     api.authenticate()
     
     api.dataset_download_files(DATASET_NAME, path=str(TEMP_DIR), unzip=True)
-    print("✅ Tải và giải nén thành công!")
+    print("Tải và giải nén thành công!")
 
 def upload_raw_to_minio():
     print("☁️ Đang đẩy file CSV gốc lên Data Lake (MinIO)...")

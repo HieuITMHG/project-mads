@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 from pathlib import Path
+import os
 
 BASE_DIR = Path(__file__).parents[2].resolve()
 
@@ -11,6 +12,7 @@ class Settings(BaseSettings):
     postgres_password: str
     postgres_db: str
     postgres_port: int
+    postgres_host: str
     postgres_version: int
 
     s3_endpoint: str
@@ -19,8 +21,9 @@ class Settings(BaseSettings):
     bucket_name: str
 
     model_config = SettingsConfigDict(
-        env_file=BASE_DIR / ".env.dev",
+        env_file=BASE_DIR / f".env.{os.getenv('ENV_STATE', 'dev')}",
         env_file_encoding="utf-8",
+        extra="ignore"
     )
 
 

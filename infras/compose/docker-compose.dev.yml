@@ -11,8 +11,8 @@ x-postgres-env: &postgres-env
 
 x-minio-env: &minio-env
   S3_ENDPOINT: ${S3_ENDPOINT}
-  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+  MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
+  MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
   BUCKET_NAME: ${BUCKET_NAME}
 
 services:
@@ -48,6 +48,8 @@ services:
       context: ../../
       dockerfile: infras/docker/Dockerfile.ingestion
     command: python data/ingestion.py
+    env_file:
+      - ../../.env.dev
     depends_on:
       postgres:
         condition: service_healthy

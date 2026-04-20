@@ -1,0 +1,8 @@
+from sqlalchemy.orm import Session
+from api.models.user import User
+
+def get_user(db: Session, username: str):
+    user = db.query(User).filter(User.username == username).first()
+    return user
+    
+    

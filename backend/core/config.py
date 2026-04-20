@@ -18,7 +18,16 @@ class Settings(BaseSettings):
     s3_endpoint: str
     aws_access_key_id: str
     aws_secret_access_key: str
-    bucket_name: str
+    olist_data: str
+    upload_bucket: str
+    
+    secret_key: str
+    algorithm: str
+    access_token_expire_minutes: int
+    refresh_token_expire_days: int
+    
+    redis_url: str
+    celery_result_backend: str
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / f".env.{os.getenv('ENV_STATE', 'dev')}",

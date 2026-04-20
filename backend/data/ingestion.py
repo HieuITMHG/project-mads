@@ -45,7 +45,7 @@ def download_from_kaggle():
 
 def upload_raw_to_minio():
     print("☁️ Đang đẩy file CSV gốc lên Data Lake (MinIO)...")
-    ensure_bucket_exists()
+    ensure_bucket_exists(settings.olist_data)
     
     for file_name, _ in FILE_TABLE_MAP:
         file_path = TEMP_DIR / file_name

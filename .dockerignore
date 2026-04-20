@@ -1,0 +1,56 @@
+# --- Version Control ---
+.git
+.gitignore
+
+# --- Python ---
+# Loại bỏ các file bytecode đã biên dịch
+__pycache__/
+*.py[cod]
+*$py.class
+# Loại bỏ môi trường ảo local (không được copy vào vì Docker dùng venv riêng)
+.venv/
+venv/
+ENV/
+env/
+
+# --- Build & Package ---
+.uv/
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+
+# --- Environment & Secrets ---
+# Rất quan trọng để tránh lộ mật khẩu trong Image
+.env
+.env.*
+!.env.example
+secrets.json
+*.pem
+*.key
+
+# --- Local Development / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Project Specific (Quan trọng với case của bạn) ---
+# Loại bỏ các file upload tạm thời ở máy local 
+# (Vì chúng ta dùng shared volume, không cần copy file cũ từ máy mình lên)
+tmp/
+uploads/
+/tmp/uploads/
+
+# --- Logs & Databases ---
+*.log
+data/
+pgdata/
+minio_data/
+redis_data/
+*.sqlite3
+
+backend/data/sample/

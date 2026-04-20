@@ -14,9 +14,9 @@ def get_s3_client():
 
 s3_client = get_s3_client()
 
-def ensure_bucket_exists():
+def ensure_bucket_exists(bucket_name: str):
     try:
-        s3_client.head_bucket(Bucket=settings.bucket_name)
+        s3_client.head_bucket(Bucket=bucket_name)
     except Exception:
-        s3_client.create_bucket(Bucket=settings.bucket_name)
-        print(f"Đã tạo mới bucket: {settings.bucket_name}")
+        s3_client.create_bucket(Bucket=bucket_name)
+        print(f"Đã tạo mới bucket: {bucket_name}")

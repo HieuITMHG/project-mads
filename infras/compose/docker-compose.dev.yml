@@ -13,7 +13,8 @@ x-minio-env: &minio-env
   S3_ENDPOINT: ${S3_ENDPOINT}
   MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
   MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
-  BUCKET_NAME: ${BUCKET_NAME}
+  UPLOAD_BUCKET: ${UPLOAD_BUCKET}
+  OLIST_DATA: ${OLIST_DATA}
 
 services:
   postgres:
@@ -56,6 +57,64 @@ services:
       minio:
         condition: service_healthy
 
+  api:
+    build:
+      context: ../../
+      dockerfile: infras/docker/Dockerfile.api
+    command: >
+      uvicorn api.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+    env_file:
+      - ../../.env.dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      ingestion:
+        condition: service_completed_successfully 
+      redis:
+        condition: service_healthy
+
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../../backend:/app/backend
+      - shared_tmp:/tmp/uploads
+    
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      <<: *healthcheck_base 
+      test: ["CMD", "redis-cli", "ping"]
+  
+  celery_worker:
+    build: 
+      context: ../../
+      dockerfile: infras/docker/Dockerfile.api
+    command: celery -A core.worker worker --loglevel=debug
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    env_file:
+      - ../../.env.dev
+    volumes:
+      - ../../backend:/app/backend 
+      - shared_tmp:/tmp/uploads
+
 volumes:
   pgdata:
   minio_data:
+  backend:
+  redis_data:
+  shared_tmp:

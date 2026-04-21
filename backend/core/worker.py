@@ -5,7 +5,7 @@ celery = Celery(
     "worker",
     broker=settings.redis_url,          
     backend=settings.celery_result_backend,
-    include=[]
+    include=["api.tasks.ingestion"]
 )
 
 celery.conf.broker_connection_retry_on_startup = True

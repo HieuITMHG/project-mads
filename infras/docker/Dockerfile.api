@@ -29,4 +29,7 @@ RUN groupadd -g 1410 appgroup && \
 
 ENV PYTHONPATH=/app/backend
 
+RUN mkdir -p /tmp/uploads && \
+    chown -R appuser:appgroup /app /tmp/uploads
+
 USER appuser

@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     redis_url: str
     celery_result_backend: str
 
+    temp_dir: str
+
+    max_upload_size_mb: int = 10
+
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / f".env.{os.getenv('ENV_STATE', 'dev')}",
         env_file_encoding="utf-8",

@@ -22,7 +22,7 @@ logs-dev:
 
 # Vào thẳng terminal của container postgres để test DB
 db-shell:
-	docker exec -it mads-postgres psql -U postgres -d postgres
+	docker exec -it mads-postgres psql -U admin -d ecommerce
 
 # --- CÁC LỆNH BACKEND (Chạy ở máy Local) ---
 # Vì thư mục gốc không có uv.lock, phải cd vào backend rồi mới chạy lệnh

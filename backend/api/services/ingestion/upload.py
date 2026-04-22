@@ -25,9 +25,8 @@ def upload_to_s3(file_path: str,
                 file_size: int,
                 db: Session):
     try:
-        print("="*100)
-        print(f"Chatbox id là: {chatbox_id}")
-        print("="*100)
+        is_physic_exist = False
+        sessionfile_id = 0
         file_hash = calculate_file_hash(file_path)
         physic_file = db.query(PhysicFile).filter(PhysicFile.file_hash == file_hash).first()
 
@@ -50,10 +49,12 @@ def upload_to_s3(file_path: str,
             db.flush()
             print("Đã upload file mới")
         else:
+            is_physic_exist = True
             print("File vật lý đã upload rồi")
 
         exist_session_file = db.query(SessionFile).filter(SessionFile.chatbox_id == chatbox_id,
                                                     SessionFile.physic_file_id == physic_file.id).first()
+        
         if not exist_session_file:
             session_file = SessionFile(
                 chatbox_id=chatbox_id,
@@ -64,12 +65,16 @@ def upload_to_s3(file_path: str,
 
             db.add(session_file)
             db.flush()
+            sessionfile_id = session_file.id
             print("Đã upload session file mới")
         else:
+            sessionfile_id = exist_session_file.id
             print("Box này có file này rồi")
 
-        return {"status": "Success", "file": original_filename}
-
-    finally:
+        return {"status": "Success", "file": original_filename, "is_physic_exist": is_physic_exist, "sessionfile_id": sessionfile_id}
+    except Exception as e:
+        print(e)
         if os.path.exists(file_path):
             os.remove(file_path)
+    finally:
+        print("Đã hoàn thành upload")

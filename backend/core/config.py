@@ -33,6 +33,10 @@ class Settings(BaseSettings):
 
     max_upload_size_mb: int = 10
 
+    qdrant_endpoint: str
+    qdrant_key: str
+    upload_collection:str
+
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / f".env.{os.getenv('ENV_STATE', 'dev')}",
         env_file_encoding="utf-8",

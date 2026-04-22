@@ -16,6 +16,11 @@ x-minio-env: &minio-env
   UPLOAD_BUCKET: ${UPLOAD_BUCKET}
   OLIST_DATA: ${OLIST_DATA}
 
+x-qdrant-env: &qdrant-env
+  QDRANT_KEY: ${QDRANT_KEY}
+  QDRANT_ENDPOINT: ${QDRANT_ENDPOINT}
+
+
 services:
   postgres:
     image: postgres:${POSTGRES_VERSION}
@@ -29,6 +34,18 @@ services:
     healthcheck:
       <<: *healthcheck_base
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+
+  qdrant:
+    image: qdrant/qdrant:v1.17
+    ports:
+      - "6333:6333"
+    environment:
+      <<: *qdrant-env
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      <<: *healthcheck_base
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
 
   minio:
     image: quay.io/minio/minio:latest
@@ -77,12 +94,15 @@ services:
         condition: service_completed_successfully 
       redis:
         condition: service_healthy
+      qdrant:
+        condition: service_healthy
 
     ports:
       - "8000:8000"
     volumes:
       - ../../backend:/app/backend
       - shared_tmp:/tmp/uploads
+    image: mads-backend
     
   redis:
     image: redis:7-alpine
@@ -95,9 +115,7 @@ services:
       test: ["CMD", "redis-cli", "ping"]
   
   celery_worker:
-    build: 
-      context: ../../
-      dockerfile: infras/docker/Dockerfile.api
+    image: mads-backend
     command: celery -A core.worker worker --loglevel=debug
     depends_on:
       redis:
@@ -105,6 +123,8 @@ services:
       postgres:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      qdrant:
         condition: service_healthy
     env_file:
       - ../../.env.dev
@@ -118,3 +138,4 @@ volumes:
   backend:
   redis_data:
   shared_tmp:
+  qdrant_data:

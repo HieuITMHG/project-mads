@@ -1,35 +1,75 @@
 FROM python:3.12-slim
 
+# 1. Cài đặt công cụ quản lý package 'uv' siêu tốc
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-WORKDIR /app
-
+# 2. Khai báo các biến môi trường toàn cục
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+ENV PYTHONPATH=/app/backend
+ENV HF_HOME=/app/.hf_cache
+ENV HOME=/home/appuser
 
-COPY backend/pyproject.toml backend/uv.lock /app/backend/
+# 3. Cài đặt các thư viện hệ thống cần thiết cho OpenCV / OCR
+RUN apt-get update && apt-get install -y \
+    libglib2.0-0 \
+    libgl1 \
+    libxcb1 \
+    libx11-6 \
+    libxext6 \
+    libsm6 \
+    libxrender1 \
+    && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app/backend
-
-RUN uv sync --extra api --no-dev --no-install-project
+# 4. Tạo User và Group phi đặc quyền (Non-root) để bảo mật
+RUN groupadd -g 1410 appgroup && \
+    useradd -u 1410 -g appgroup -m -s /bin/bash appuser
 
 WORKDIR /app
-COPY backend/ /app/backend/
 
+# 5. CHIẾN THUẬT ZERO-BLOAT: Tạo sẵn các thư mục rỗng và phân quyền ngay lúc này
+# Điều này đảm bảo khi appuser ghi dữ liệu vào đây sẽ không bị phình to Docker layer
+RUN mkdir -p /opt/venv /tmp/uploads /app/.hf_cache /app/backend && \
+    chown -R appuser:appgroup /opt/venv /tmp/uploads /app/.hf_cache /app
+
+# ==========================================
+# TỪ ĐÂY TRỞ XUỐNG MỌI THỨ CHẠY DƯỚI QUYỀN APPUSER
+# ==========================================
+USER appuser
 WORKDIR /app/backend
+
+# 6. CHIẾN THUẬT LAYER CACHING: Chỉ copy file cấu hình để cài thư viện trước
+COPY --chown=appuser:appgroup backend/pyproject.toml backend/uv.lock /app/backend/
+
+# Lệnh này sẽ được Docker "nhớ" (cache). Miễn là không thêm/bớt thư viện, nó sẽ không chạy lại
+RUN uv sync --extra api --no-dev --no-install-project
+
+# 7. TẢI SẴN MODEL (Pre-download): Giúp các request đầu tiên không bị chậm
+# Cả 2 model đều sẽ được lưu vào /opt/venv hoặc /app/.hf_cache thuộc quyền sở hữu của appuser
+RUN python - <<EOF
+from docling.document_converter import DocumentConverter
+# Khởi tạo giả để ép thư viện tải các pre-trained models (OCR, etc.) về cache
+DocumentConverter()
+EOF
+
+RUN python - <<EOF
+from sentence_transformers import SentenceTransformer
+# Tải model embedding về local cache
+model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+model.encode(["warmup"])
+EOF
+
+# 8. COPY MÃ NGUỒN VÀ HOÀN TẤT
+# Mỗi lần bạn sửa code, Docker chỉ chạy lại từ bước này trở đi (cực kỳ nhanh)
+COPY --chown=appuser:appgroup backend/ /app/backend/
+
+# Link mã nguồn hiện tại vào /opt/venv
 RUN uv sync --extra api --no-dev
 
-RUN groupadd -g 1410 appgroup && \
-    useradd -u 1410 -g appgroup -m -s /bin/bash appuser && \
-    chown -R appuser:appgroup /app
-
-ENV PYTHONPATH=/app/backend
-
-RUN mkdir -p /tmp/uploads && \
-    chown -R appuser:appgroup /app /tmp/uploads
-
-USER appuser
+# Tùy thuộc vào cách bạn chạy app, có thể thêm CMD hoặc ENTRYPOINT ở đây
+# Ví dụ:
+# CMD ["fastapi", "run", "api/main.py", "--port", "8000", "--host", "0.0.0.0"]

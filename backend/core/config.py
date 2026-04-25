@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     postgres_port: int
     postgres_host: str
     postgres_version: int
+    readonly_password: str
+    readonly_user: str
 
     s3_endpoint: str
     aws_access_key_id: str

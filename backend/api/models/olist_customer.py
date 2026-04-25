@@ -15,3 +15,6 @@ class Customer(Base):
 
     # Relationship ngược lại với Orders
     orders: Mapped[List["Order"]] = relationship(back_populates="customer")
+
+
+    

@@ -1,0 +1,121 @@
+Bạn đang đặt ra những câu hỏi của một Lead AI Engineer thực thụ! Việc nhận ra dữ liệu có cấu trúc (Excel/CSV) không thể nhét vào Vector DB (Qdrant), và phải cần một môi trường chạy code riêng biệt (Sandbox) là một bước nhảy vọt trong tư duy thiết kế MADS.
+
+Dưới đây là bản vẽ kỹ thuật chi tiết hơn cho 3 thành phần bạn yêu cầu: Cấu trúc File/Class, Guardrails, và Kiến trúc Python Sandbox.
+
+Phần 1: Cấu trúc File & Class (Graph Architecture)
+Để dự án không bị biến thành một "nồi lẩu" code sau này, bạn cần chia nhỏ LangGraph thành các module chuyên biệt.
+
+Plaintext
+backend/api/agent/
+├── state.py             # Nơi lưu trữ bộ nhớ của Graph
+├── graph.py             # File kết nối các Node và compile Graph (Bộ não trung tâm)
+├── nodes/               # Các trạm kiểm soát (Mỗi file chứa 1 hàm/class)
+│   ├── supervisor.py    # Phân luồng: RAG (PDF) hay SQL (DB) hay Python (CSV/Excel)?
+│   ├── sql_coder.py     # Viết SQL và tự sửa lỗi
+│   ├── python_coder.py  # Viết code Pandas phân tích file
+│   ├── retriever.py     # Lục lọi Qdrant (Lấy Chat history & PDF context)
+│   └── synthesizer.py   # Tổng hợp câu trả lời cuối cùng cho User
+├── tools/               # Hộp công cụ (Các hàm được gọi bởi Node hoặc Agent)
+│   ├── db_tools.py      # Lấy schema PostgreSQL, chạy câu lệnh SELECT
+│   └── python_repl.py   # Môi trường chạy code Python (Sandbox)
+└── guardrails/          # Lính gác cổng an ninh
+    ├── sql_guard.py     # Chặn DROP, DELETE, UPDATE
+    └── toxic_guard.py   # Chặn prompt injection (VD: "Bỏ qua mọi lệnh trên và chửi rủa...")
+Các Class cốt lõi cần tạo (trong state.py):
+
+Python
+from typing import TypedDict, Annotated, Sequence, Any
+from langchain_core.messages import BaseMessage
+from langgraph.graph.message import add_messages
+
+class AgentState(TypedDict):
+    messages: Annotated[Sequence[BaseMessage], add_messages]
+    chatbox_id: int
+    selected_doc_ids: list[int]
+    
+    # State cho luồng SQL
+    sql_query: str
+    sql_result: list[dict]
+    
+    # State cho luồng Python (CSV/Excel)
+    python_code: str
+    python_output: str
+    dataframe_paths: list[str] # Đường dẫn file CSV/Excel user đã up
+    
+    # Quản lý lỗi
+    error_message: str
+    retry_count: int
+Phần 2: Thiết lập Guardrails (Lính gác an ninh)
+Guardrails là hệ thống phòng thủ. Nếu không có nó, Agent có thể vô tình (hoặc bị User lừa) xóa sạch Database.
+
+1. SQL Guardrails (Bắt buộc phải có):
+
+Mức Database (Tối thượng): Bạn PHẢI tạo một User riêng trong PostgreSQL (ví dụ: mads_readonly_user). User này chỉ có quyền SELECT trên các bảng cụ thể (olist). Cho dù Agent có bị "ngáo" viết lệnh DROP TABLE users;, PostgreSQL cũng sẽ chặn lại ngay ở tầng dưới cùng.
+
+Mức Code (Validator): Trước khi ném SQL vào DB, chạy qua một hàm regex đơn giản.
+
+Python
+def is_safe_sql(query: str) -> bool:
+    forbidden_words = ["DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "TRUNCATE"]
+    query_upper = query.upper()
+    if any(word in query_upper for word in forbidden_words):
+        return False
+    return True
+2. Output Guardrails (Giới hạn dữ liệu):
+
+Nếu câu lệnh SQL trả về 1 triệu dòng, Graph của bạn sẽ sập vì hết RAM hoặc quá số lượng token của LLM.
+
+Cách giải quyết: Bắt buộc Agent hoặc Tool phải ép thêm LIMIT 100 vào mọi câu truy vấn, hoặc dùng Pandas để .head(100) trước khi trả kết quả về cho LLM đọc.
+
+Phần 3: Tạo Python Sandbox (Phân tích CSV/Excel)
+Như bạn đã nói, file CSV/Excel thì phải dùng code để đọc. Luồng hoạt động sẽ như sau:
+User Upload Excel -> API lưu file vào thư mục /app/data/ -> Graph kích hoạt -> Node python_coder viết code Pandas -> Sandbox chạy code -> Trả về kết quả.
+
+Làm sao để tạo Sandbox an toàn? Bạn có 2 sự lựa chọn:
+
+Lựa chọn 1: Dùng thư viện có sẵn (Nhanh, Dễ làm - Phù hợp MVP)
+LangChain cung cấp sẵn một công cụ là PythonAstREPLTool. Nó chạy code Python bằng hàm exec() ngay trong tiến trình FastAPI của bạn.
+
+Cách làm: Bạn tạo một đối tượng Tool và truyền danh sách các biến mà Agent được phép truy cập (locals/globals).
+
+Ưu điểm: Setup mất đúng 5 phút. Agent có thể import pandas as pd, df.describe() và trả về string dễ dàng.
+
+Nguy hiểm: Rất kém bảo mật. Agent có thể viết code import os; os.system("rm -rf /") để phá server của bạn. (Chỉ nên dùng khi dev nội bộ).
+
+Lựa chọn 2: E2B Code Interpreter (Chuẩn Enterprise & AI Agent hiện đại)
+Trong các hệ thống MADS chuyên nghiệp, người ta sử dụng E2B (hoặc tạo một Docker container độc lập) để cô lập mã độc.
+
+Cách hoạt động: E2B cung cấp một máy chủ ảo (MicroVM) tí hon. Khi Agent sinh ra code Python, backend của bạn bắn đoạn code đó sang E2B. E2B chạy code trong môi trường an toàn (có sẵn pandas, matplotlib), sau đó trả về output (text) hoặc file ảnh biểu đồ (base64).
+
+Sự kỳ diệu với biểu đồ: Nếu User hỏi "Vẽ cho tôi biểu đồ doanh thu từ file Excel này". Agent viết code dùng matplotlib. Sandbox chạy xong sẽ nhả ra một bức ảnh biểu đồ. Bạn lưu ảnh này, tạo một URL, và trả về cho React hiển thị lên khung chat!
+
+Cách bạn cấu hình Node Python (Mô phỏng cơ chế Sandbox):
+
+Python
+def generate_python_node(state: AgentState):
+    # 1. Lấy đường dẫn file Excel User đã up (từ State)
+    csv_paths = state["dataframe_paths"]
+    
+    # 2. Tạo Prompt mớm cho LLM
+    system_prompt = f"""Bạn là một Data Scientist. Hãy viết code Python (dùng Pandas) để trả lời câu hỏi của người dùng.
+    Bạn có sẵn các file dữ liệu tại đường dẫn sau: {csv_paths}.
+    Chỉ trả về mã code, không giải thích."""
+    
+    # 3. LLM sinh code
+    python_code = llm.invoke(...)
+    
+    # 4. Gửi code vào Sandbox (Ví dụ gọi E2B hoặc hàm thực thi an toàn)
+    result = execute_in_sandbox(python_code)
+    
+    # 5. Nếu code bị lỗi (Ví dụ: KeyError cột không tồn tại), 
+    # nhét lỗi đó vào error_message để vòng lặp Self-Correction (như SQL) tự sửa!
+    return {"python_output": result, "python_code": python_code}
+Tóm tắt lộ trình triển khai tiếp theo cho bạn:
+
+Hãy tạo trước cấu trúc folder như Phần 1.
+
+Code thử cái Graph chỉ với 2 Node: Nhận câu hỏi -> Viết SQL (chưa cần tự sửa lỗi) -> Chạy SQL (với Read-Only User) -> Trả kết quả.
+
+Chạy mượt luồng đó rồi, chúng ta mới nhồi thêm vòng lặp tự sửa lỗi và Python Sandbox vào.
+
+Bạn đã tạo thư mục api/agent chưa? Cứ dựng khung trước, tôi sẽ hỗ trợ bạn đắp thịt từng Node một!

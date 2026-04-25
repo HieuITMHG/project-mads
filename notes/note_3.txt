@@ -1,0 +1,109 @@
+GIAI ĐOẠN 1: Thiết lập "Lô cốt" MCP Sandbox (Môi trường an toàn)
+Mục tiêu: Tạo ra một service độc lập, an toàn tuyệt đối để chạy code Python/SQL, tách biệt hoàn toàn khỏi API chính.
+
+Tạo thư mục & Cấu hình: Tạo folder backend/mcp_server/.
+
+Viết Code FastMCP (main.py):
+
+Khởi tạo FastMCP với chuẩn giao tiếp SSE (run_sse).
+
+Viết Tool 1 (SQL): Hàm nhận query, dùng SQLAlchemy kết nối Database bằng tài khoản Read-Only, trả kết quả LIMIT 100.
+
+Viết Tool 2 (Python/Pandas): Hàm nhận code Python, dùng exec() chạy code, bắt lỗi traceback, thu thập stdout (kết quả print) trả về.
+
+Dockerize Sandbox:
+
+Tạo Dockerfile.mcp (dựa trên Python, cài mcp, pandas, sqlalchemy).
+
+Thêm service mcp_server vào docker-compose.dev.yml.
+
+Set Guardrails trong Docker Compose: Giới hạn CPU/RAM (tránh tràn bộ nhớ), cắt mạng external (bảo mật), set restart: always.
+
+✅ Tiêu chí hoàn thành (DoD): Chạy make up, dùng Postman hoặc một script Python ngắn gọi thử HTTP lên port của mcp_server xem nó có chịu chạy lệnh print("Hello") và nhả kết quả không.
+
+🟡 GIAI ĐOẠN 2: Thiết kế Bộ Nhớ & Trạng Thái (State & Memory)
+Mục tiêu: Khai báo cấu trúc não bộ cho Agent và chuẩn bị nơi lưu trữ.
+
+Setup Qdrant cho Chat History: Tạo thêm một collection tên là chat_history trong Qdrant (bên cạnh collection documents đã có).
+
+Định nghĩa AgentState: Tạo file backend/api/agent/state.py. Khai báo lớp TypedDict chứa:
+
+messages: Lịch sử hội thoại hiện tại.
+
+chatbox_id, selected_doc_ids: Ngữ cảnh từ user.
+
+error_message, retry_count: Để phục vụ vòng lặp tự sửa lỗi.
+
+sql_query, python_code: Code do Agent sinh ra.
+
+Cấu hình Checkpointer: Trong code kết nối PostgreSQL, setup AsyncPostgresSaver của LangGraph. Đây là cái "ổ cứng" để lưu State, phục vụ Human-in-the-Loop.
+
+✅ Tiêu chí hoàn thành: Chạy thử code tạo bảng Checkpoint của LangChain-Postgres thành công trong DB.
+
+🟠 GIAI ĐOẠN 3: Xây dựng các Trạm kiểm soát (LangGraph Nodes)
+Mục tiêu: Viết logic suy luận cho từng Agent nhỏ. TUYỆT ĐỐI test bằng Jupyter Notebook hoặc Terminal, chưa đụng đến FastAPI.
+
+Tạo cấu trúc file: Tạo folder backend/api/agent/nodes/.
+
+Viết Node Retriever: Chọc vào Qdrant lấy Context (nhớ filter theo selected_doc_ids) và lấy Long-term Memory từ chat_history. Nhét tất cả vào State.
+
+Viết Node Supervisor: Đọc câu hỏi, dùng LLM phân loại xem câu này nên đi luồng RAG, luồng SQL hay luồng Python.
+
+Viết Node Coder (SQL/Python) + Self-Correction:
+
+Viết prompt mớm schema DB hoặc schema file Excel.
+
+Đọc biến error_message từ State. Nếu có chữ, ép prompt thêm dòng: "Lệnh trước mài viết sai lỗi này, sửa ngay!".
+
+Viết Node Executor: Node này sẽ làm MCP Client. Nó gọi sang mcp_server (đã dựng ở GĐ 1) để chạy code. Bắt Exception nếu lỗi để nhét vào error_message và tăng retry_count.
+
+Viết Node Synthesizer: Tổng hợp kết quả từ DB/Sandbox và viết câu trả lời cho User.
+
+✅ Tiêu chí hoàn thành: Từng node chạy test độc lập (chưa ghép) đều nhả ra output đúng định dạng mong đợi.
+
+🔴 GIAI ĐOẠN 4: Lắp ráp Đồ thị & Human-in-the-Loop (Orchestration)
+Mục tiêu: Nối các Node thành một đồ thị hoàn chỉnh và kiểm thử toàn bộ luồng chat.
+
+Khởi tạo Đồ thị: Tạo file backend/api/agent/graph.py. Khai báo StateGraph(AgentState).
+
+Thêm Nodes & Edges: Nối các Node đã tạo ở Giai đoạn 3 lại với nhau bằng add_edge và add_conditional_edges (Quyết định luồng rẽ nhánh và vòng lặp).
+
+Setup Breakpoint (HITL): Lúc .compile() graph, cắm cờ interrupt_before=["Executor"].
+
+Test bằng CLI (Terminal): Viết file test_graph.py chạy vòng lặp while True. Nhập input từ bàn phím -> Xem Graph chạy qua từng node in ra màn hình -> Giả lập việc User "Duyệt" (Approve) code trên terminal -> Nhận câu trả lời cuối cùng.
+
+✅ Tiêu chí hoàn thành: Graph chạy mượt mà trên Terminal, tự biết xoay vòng sửa lỗi khi gọi sai tên cột, và biết dừng lại chờ xác nhận ở Node Executor.
+
+🟣 GIAI ĐOẠN 5: Bọc FastAPI & Luồng Streaming (API Layer)
+Mục tiêu: Biến hệ thống nội bộ thành API để Frontend gọi được.
+
+API Streaming (/chat/{id}/prompt/stream):
+
+Nhận prompt và selected_doc_ids từ React.
+
+Truyền vào Graph, dùng astream_events để bắt sự kiện.
+
+Trả về chuẩn SSE: Bắn trạng thái ("Đang lục Qdrant..."), bắn token (chữ LLM sinh ra).
+
+Lưu Memory: Ở cuối luồng stream, gọi hàm lưu câu hỏi và câu trả lời hoàn chỉnh vào Qdrant chat_history.
+
+API Phê duyệt HITL (/chat/{id}/approve):
+
+Nhận tín hiệu "Đã duyệt" hoặc "Mã code đã sửa bằng tay".
+
+Dùng graph.update_state để cập nhật lại State.
+
+Gọi graph.stream(None) để đánh thức Graph dậy và chạy tiếp.
+
+✅ Tiêu chí hoàn thành: Dùng Postman hoặc cURL gọi API, màn hình hiện ra từng luồng chữ chảy xuống (Streaming) đúng chuẩn SSE.
+
+🔵 GIAI ĐOẠN 6: Tích hợp Frontend React (UI Binding)
+Mục tiêu: Lên giao diện người dùng.
+
+Giao diện Sidebar / Document List: Hiển thị danh sách file SessionFile trong chatbox hiện tại. Có Checkbox để người dùng tick chọn (Cấp doc_ids).
+
+Xử lý luồng SSE: Dùng fetch API để đọc luồng event-stream. Tách các event status (để hiện thanh loading) và token (để nối chữ vào khung chat).
+
+Popup Human-in-the-Loop: Khi bắt được event "waiting_for_approval" từ API, hiện Modal/Popup chứa đoạn code SQL/Python. Cho user nút [Chạy luôn] hoặc [Sửa code rồi chạy]. Bấm nút sẽ gọi API /approve.
+
+✅ Tiêu chí hoàn thành: Người dùng tick chọn file PDF, hỏi một câu phức tạp. UI hiện "Đang suy nghĩ..." -> Hiện Popup duyệt lệnh -> Agent tự sửa lỗi 1 vòng -> Trả ra câu trả lời chi tiết chữ tuôn như ChatGPT. HOÀN TẤT DỰ ÁN!

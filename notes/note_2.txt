@@ -1,0 +1,86 @@
+🟢 GIAI ĐOẠN 1: Chuẩn bị Môi trường & Bảo mật (Infrastructure & Security)
+Không có bảo mật, không cho Agent chạm vào Database.
+
+Task 1.1: Thiết lập Database Read-Only User (PostgreSQL): Tạo một user riêng trong Postgres (ví dụ: mads_agent_ro). Cấp quyền chỉ được SELECT trên các bảng dữ liệu nghiệp vụ (Olist). Tuyệt đối không cấp quyền DDL/DML. Agent sẽ dùng user này để kết nối.
+
+Task 2.2: Setup Sandbox Environment: Quyết định và khởi tạo môi trường chạy code Python. Nếu dùng E2B (khuyên dùng), đăng ký API Key và cài SDK. Nếu tự build, cấu hình một Docker container tách biệt (không mount volume hệ thống) để chạy lệnh exec.
+
+Task 3.3: Khởi tạo Qdrant Collection mới: Tạo thêm một collection tên là chat_history trong Qdrant (bên cạnh collection documents đã có) để chuẩn bị cho Long-term Memory.
+
+🟡 GIAI ĐOẠN 2: Thiết kế State & Cấu trúc Dữ liệu (State & Memory Design)
+Định nghĩa "Não bộ" của LangGraph.
+
+Task 2.1: Hoàn thiện Schema PostgreSQL: Đảm bảo bảng messages có đủ các cột lưu vai trò (role), nội dung (content), và JSONB metadata (lưu trạng thái lỗi, ID file đính kèm).
+
+Task 2.2: Thiết kế AgentState (TypedDict): Lên danh sách toàn bộ các biến số sẽ chạy dọc theo Graph. Bao gồm: messages, chatbox_id, selected_doc_ids, sql_query, python_code, error_message, retry_count.
+
+Task 2.3: Setup Graph Checkpointer: Cấu hình AsyncPostgresSaver của LangGraph. Đây là thứ bắt buộc phải làm sớm để Graph có thể lưu State xuống DB, phục vụ cho tính năng Human-in-the-Loop và "nhớ" ngữ cảnh giữa các lần user chat.
+
+🟠 GIAI ĐOẠN 3: Xây dựng Bộ Công cụ & Guardrails (Tools & Defenses)
+Trang bị vũ khí và khiên đỡ cho Agent trước khi đưa vào Graph.
+
+Task 3.1: Viết SQL Guardrail (Regex): Viết hàm Python kiểm tra chuỗi string. Reject ngay lập tức nếu câu hỏi chứa DROP, DELETE, UPDATE, ALTER. (Bảo mật lớp 2 sau Read-Only User).
+
+Task 3.2: Viết SQL Tool: Viết hàm nhận string SQL, dùng SQLAlchemy kết nối (bằng Read-Only User), thực thi lệnh, fetch data, ép LIMIT 100 (để tránh nổ RAM), và trả về chuỗi JSON.
+
+Task 3.3: Viết Python Sandbox Tool: Viết hàm nhận string code Python, gửi sang E2B/Sandbox, chờ kết quả (text hoặc base64 image) và trả về.
+
+Task 3.4: Viết Retriever Tool: Viết hàm chọc vào Qdrant documents, BẮT BUỘC có tham số filter dựa trên selected_doc_ids do user truyền vào.
+
+🔴 GIAI ĐOẠN 4: Phát triển các Node của LangGraph (Core Logic)
+Đây là phần nặng nhất, code từng trạm kiểm soát một.
+
+Task 4.1: Node Supervisor (Kẻ điều phối): Viết prompt phân tích câu hỏi. Output trả về một Enum định tuyến: GO_RAG, GO_SQL, GO_PYTHON hoặc GO_GENERAL_CHAT.
+
+Task 4.2: Node Retriever (RAG & Memory): * Lấy Short-term memory (5 tin nhắn cuối từ Postgres).
+
+Lấy Long-term memory (từ Qdrant chat_history).
+
+Lấy Context (từ Qdrant documents theo ID đã tick).
+
+Gom tất cả lại nhét vào State.
+
+Task 4.3: Node SQL_Coder & Self-Correction: Viết prompt yêu cầu tạo SQL. Đọc biến error_message từ State. Nếu có lỗi cũ -> Yêu cầu sửa. Nếu retry_count >= 3 -> Trả về lỗi cứng.
+
+Task 4.4: Node Python_Coder & Self-Correction: Tương tự SQL_Coder nhưng dành cho Pandas/Dataframe.
+
+Task 4.5: Node Execute_Tool (Thực thi): Gọi các Tool ở Giai đoạn 3. Bắt exception (try-catch). Nếu lỗi -> set biến error_message, tăng retry_count.
+
+Task 4.6: Node Synthesizer (Tổng hợp viên): Nhận data thô từ SQL/Python/RAG, format lại thành câu trả lời ngôn ngữ tự nhiên.
+
+🟣 GIAI ĐOẠN 5: Ráp nối Graph & Human-in-the-Loop (Orchestration)
+Nối các Node lại thành một đồ thị hoàn chỉnh.
+
+Task 5.1: Định nghĩa Edges (Các mũi tên): Nối Supervisor đến các Node chuyên trách. Nối Node Coder đến Node Execute.
+
+Task 5.2: Conditional Edges (Luồng rẽ nhánh): Setup logic tại sau Node Execute: Nếu error_message có chữ -> quay lại Coder. Nếu rỗng -> đi tới Synthesizer.
+
+Task 5.3: Cắm cờ Breakpoint (HITL): Khi compile graph, thêm interrupt_before=["Execute_Tool"].
+
+Task 5.4: Đóng gói Graph: Khởi tạo Graph với cấu hình Checkpointer (Postgres).
+
+🔵 GIAI ĐOẠN 6: Tích hợp API & Server-Sent Events (API & UI Binding)
+Giao tiếp với thế giới bên ngoài (React frontend).
+
+Task 6.1: API POST /chat/{chatbox_id}/prompt/stream: Viết luồng astream_events. Yield các sự kiện on_chat_model_stream (chữ) và on_tool_start (status báo UI) dưới chuẩn SSE. Xử lý lưu tin nhắn mới vào Qdrant chat_history ở cuối luồng.
+
+Task 6.2: API Xử lý HITL (Status "Waiting"): Bắt sự kiện Graph bị paused. Yield về UI trạng thái "waiting_for_approval" kèm theo đoạn code SQL/Python mà Agent định chạy.
+
+Task 6.3: API POST /chat/{chatbox_id}/approve: API nhận tín hiệu "Approve" (hoặc đoạn code đã được edit bằng tay) từ User. Cập nhật lại State và gọi graph.stream(None) để đánh thức Graph chạy tiếp.
+
+Task 6.4: Đồng bộ Metadata UI: Viết API GET /chat/{chatbox_id} trả về danh sách các file đã upload (SQLite/CSV/PDF) để React render ra các Checkbox cho user tick chọn (selected_doc_ids).
+
+Cách tiếp cận (Agile):
+Đừng code hết tất cả cùng lúc. Hãy làm theo phương pháp Tracer Bullet (Bắn đạn vạch đường):
+
+Làm Giai đoạn 1 & 2.
+
+Build Giai đoạn 4 nhưng CHỈ có Node Supervisor và Node Synthesizer (Chat chay như ChatGPT). Ráp Giai đoạn 6 để test Streaming.
+
+Khi Streaming mượt rồi, cắm thêm Node Retriever (Test RAG).
+
+Cắm thêm Node SQL_Coder (Test SQL sinh tự động).
+
+Cuối cùng mới thêm Breakpoint (HITL) và Sandbox (Python).
+
+Bạn đã cài đặt xong các thư viện cần thiết cho LangGraph (langgraph, langchain-postgres, psycopg) chưa? Bước tiếp theo chúng ta sẽ thiết kế schema cho Task 2.2 (AgentState).

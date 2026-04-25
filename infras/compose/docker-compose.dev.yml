@@ -31,6 +31,7 @@ services:
       - "${POSTGRES_PORT}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d
     healthcheck:
       <<: *healthcheck_base
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
@@ -73,6 +74,23 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+
+  grant_permissions:
+    image: postgres:${POSTGRES_VERSION}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ingestion:
+        condition: service_completed_successfully
+    env_file:
+      - ../../.env.dev
+    volumes:
+      - ../../scripts:/scripts
+    entrypoint: >
+      bash -c "
+      export PGPASSWORD=$POSTGRES_PASSWORD &&
+      psql -h postgres -U $POSTGRES_USER -d $POSTGRES_DB -f /scripts/grant_readonly.sql
+      "
 
   api:
     build:
@@ -131,6 +149,20 @@ services:
     volumes:
       - ../../backend:/app/backend 
       - shared_tmp:/tmp/uploads
+
+  mcp_server:
+    build:
+      context: ../../
+      dockerfile: infras/docker/Dockerfile.mcp
+    env_file:
+      - ../../.env.dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8001:8001"
+    volumes:
+      - ../../shared_tmp:/tmp/uploads
 
 volumes:
   pgdata:

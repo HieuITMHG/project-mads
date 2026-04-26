@@ -2,7 +2,7 @@ from typing import Optional, List
 from sqlalchemy import String, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from models.base import Base
+from api.models.base import Base
 
 class Product(Base):
     __tablename__ = "olist_products"

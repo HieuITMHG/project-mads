@@ -31,7 +31,7 @@ services:
       - "${POSTGRES_PORT}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./init:/docker-entrypoint-initdb.d
+      - ./init:/01-create-readonly-user.sh
     healthcheck:
       <<: *healthcheck_base
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
@@ -74,6 +74,10 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    volumes:
+      - ../../core:/app/core
+      - ../../data:/app/data
+      - ../../api/models:/app/api/models
 
   grant_permissions:
     image: postgres:${POSTGRES_VERSION}
@@ -118,8 +122,9 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ../../backend:/app/backend
-      - shared_tmp:/tmp/uploads
+      - ../../api:/app/api         
+      - ../../core:/app/core       
+      - ../../shared_tmp:/tmp/uploads
     image: mads-backend
     
   redis:
@@ -147,8 +152,9 @@ services:
     env_file:
       - ../../.env.dev
     volumes:
-      - ../../backend:/app/backend 
-      - shared_tmp:/tmp/uploads
+      - ../../api:/app/api          
+      - ../../core:/app/core        
+      - ../../shared_tmp:/tmp/uploads
 
   mcp_server:
     build:
@@ -163,11 +169,26 @@ services:
       - "8001:8001"
     volumes:
       - ../../shared_tmp:/tmp/uploads
+      - ../../mcp_server:/app/mcp_server
+    environment:
+      - MCP_PORT=${MCP_PORT}
+      - MCP_HOST=${MCP_HOST}
+
+  sandbox_api:
+    build:
+      context: ../../
+      dockerfile: infras/docker/Dockerfile.sandbox_api
+    environment:
+      - HOST_SHARED_TMP_DIR=${HOST_SHARED_TMP_DIR}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../../shared_tmp:/tmp/uploads
+      - ../../sandbox_api:/app/sandbox_api
+    ports:
+      - "8002:8002"
 
 volumes:
   pgdata:
   minio_data:
-  backend:
   redis_data:
-  shared_tmp:
   qdrant_data:

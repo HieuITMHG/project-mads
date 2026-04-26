@@ -8,7 +8,7 @@ ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-ENV PYTHONPATH=/app/backend
+ENV PYTHONPATH=/app
 ENV HF_HOME=/app/.hf_cache
 ENV HOME=/home/appuser
 
@@ -27,13 +27,12 @@ RUN groupadd -g 1410 appgroup && \
 
 WORKDIR /app
 
-RUN mkdir -p /opt/venv /tmp/uploads /app/.hf_cache /app/backend && \
+RUN mkdir -p /opt/venv /tmp/uploads /app/.hf_cache /app/api && \
     chown -R appuser:appgroup /opt/venv /tmp/uploads /app/.hf_cache /app
 
 USER appuser
-WORKDIR /app/backend
 
-COPY --chown=appuser:appgroup backend/pyproject.toml backend/uv.lock /app/backend/
+COPY --chown=appuser:appgroup pyproject.toml uv.lock ./
 
 RUN uv sync --extra api --no-dev --no-install-project
 
@@ -50,7 +49,8 @@ model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 model.encode(["warmup"])
 EOF
 
-COPY --chown=appuser:appgroup backend/ /app/backend/
+COPY --chown=appuser:appgroup core/ ./core/
+COPY --chown=appuser:appgroup api/ ./api/
 
 RUN uv sync --extra api --no-dev
 

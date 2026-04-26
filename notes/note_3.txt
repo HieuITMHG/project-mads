@@ -107,3 +107,5 @@ Xử lý luồng SSE: Dùng fetch API để đọc luồng event-stream. Tách c
 Popup Human-in-the-Loop: Khi bắt được event "waiting_for_approval" từ API, hiện Modal/Popup chứa đoạn code SQL/Python. Cho user nút [Chạy luôn] hoặc [Sửa code rồi chạy]. Bấm nút sẽ gọi API /approve.
 
 ✅ Tiêu chí hoàn thành: Người dùng tick chọn file PDF, hỏi một câu phức tạp. UI hiện "Đang suy nghĩ..." -> Hiện Popup duyệt lệnh -> Agent tự sửa lỗi 1 vòng -> Trả ra câu trả lời chi tiết chữ tuôn như ChatGPT. HOÀN TẤT DỰ ÁN!
+
+

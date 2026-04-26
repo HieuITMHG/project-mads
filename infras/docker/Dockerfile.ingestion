@@ -8,18 +8,26 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+ENV PYTHONPATH=/app
 
-COPY backend/pyproject.toml backend/uv.lock /app/backend/
+RUN groupadd -g 1410 appgroup && \
+    useradd -u 1410 -g appgroup -m -s /bin/bash appuser
 
-WORKDIR /app/backend
+WORKDIR /app
+
+RUN mkdir -p /opt/venv && \
+    chown -R appuser:appgroup /opt/venv /app
+
+USER appuser
+
+COPY --chown=appuser:appgroup pyproject.toml uv.lock ./
 
 RUN uv sync --extra ingestion --no-dev --no-install-project
 
-WORKDIR /app
-COPY backend/ /app/backend/
+COPY --chown=appuser:appgroup core/ ./core/
+COPY --chown=appuser:appgroup data/ ./data/
+COPY --chown=appuser:appgroup api/models ./api/models/
 
-WORKDIR /app/backend
 RUN uv sync --extra ingestion --no-dev
-
-ENV PYTHONPATH=/app/backend
-ENV PATH="/app/backend/.venv/bin:$PATH"

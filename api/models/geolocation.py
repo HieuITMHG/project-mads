@@ -1,7 +1,7 @@
 from sqlalchemy import String, Integer, Float
 from sqlalchemy.orm import Mapped, mapped_column
 
-from models.base import Base
+from api.models.base import Base
 
 
 class Geolocation(Base):

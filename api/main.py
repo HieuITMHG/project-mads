@@ -19,7 +19,7 @@ Base.metadata.create_all(bind=engine)
 ensure_bucket_exists(settings.olist_data)
 ensure_bucket_exists(settings.upload_bucket)
 
-app = FastAPI(title="This is my fucking api")
+app = FastAPI(title="MADS APP")
 
 app.include_router(chat.router)
 app.include_router(user.router)

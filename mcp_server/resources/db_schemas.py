@@ -1,4 +1,4 @@
-from server import mcp
+from mcp_server.server import mcp
 
 @mcp.resource("db://olist_schema")
 def get_olist_schemas():

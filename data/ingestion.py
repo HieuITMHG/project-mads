@@ -52,7 +52,7 @@ def upload_raw_to_minio():
         if file_path.exists():
             s3_client.upload_file(
                 Filename=str(file_path),
-                Bucket=settings.bucket_name,
+                Bucket=settings.olist_data,
                 Key=f"raw/olist/{file_name}"
             )
             print(f"  -> Đã upload {file_name}")

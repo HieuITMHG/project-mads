@@ -17,6 +17,9 @@ down:
 build:
 	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) build
 
+build-nocache:
+	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) build --no-cache
+
 logs-dev:
 	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) logs -f
 

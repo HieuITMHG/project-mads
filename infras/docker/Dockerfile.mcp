@@ -5,7 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
 
-WORKDIR /app/backend
+WORKDIR /app
 
 RUN groupadd -g 1410 appgroup && \
     useradd -u 1410 -g appgroup -m -s /bin/bash appuser
@@ -16,10 +16,10 @@ RUN mkdir -p /opt/venv && chown -R appuser:appgroup /opt/venv
 
 USER appuser
 
-COPY --chown=appuser:appgroup backend/pyproject.toml backend/uv.lock ./
+COPY --chown=appuser:appgroup pyproject.toml uv.lock ./
 RUN uv sync --extra mcp-server --no-dev --no-install-project
 
-COPY --chown=appuser:appgroup backend/core/config.py ./core/config.py
-COPY --chown=appuser:appgroup backend/mcp_server ./mcp_server
+COPY --chown=appuser:appgroup core/config.py ./core/config.py
+COPY --chown=appuser:appgroup mcp_server ./mcp_server
 
 CMD ["uv", "run", "python", "-m", "mcp_server.main"]

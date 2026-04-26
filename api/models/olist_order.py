@@ -3,7 +3,7 @@ from typing import Optional, List
 from sqlalchemy import String, DateTime, ForeignKey
 from sqlalchemy.orm import  Mapped, mapped_column, relationship
 
-from models.base import Base
+from api.models.base import Base
 
 class Order(Base):
     __tablename__ = "olist_orders"

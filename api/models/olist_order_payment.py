@@ -1,7 +1,7 @@
 from sqlalchemy import String, Integer, Float,  ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from models.base import Base
+from api.models.base import Base
 
 class OrderPayment(Base):
     __tablename__ = "olist_order_payments"

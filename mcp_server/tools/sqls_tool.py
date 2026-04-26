@@ -15,4 +15,3 @@ def execute_readonly_sql(query: str) -> str:
         return f"Lỗi SQL: {str(e)}"
     finally:
         db.close()
-    

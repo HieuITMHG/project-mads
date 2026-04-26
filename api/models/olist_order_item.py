@@ -2,7 +2,7 @@ from datetime import datetime
 from sqlalchemy import  Integer, Float, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from models.base import Base
+from api.models.base import Base
 
 class OrderItem(Base):
     __tablename__ = "olist_order_items"

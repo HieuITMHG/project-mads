@@ -7,7 +7,7 @@ from core.config import settings
 from api.schemas.user import User
 from api.repositories.user_repo import get_user
 from core.postgres import get_db
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Khai báo công cụ bóc tách Token. 
 # tokenUrl="login" là khai báo cho Swagger UI biết: "Muốn lấy token thì gọi API /login nhé"
@@ -15,7 +15,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
-    db: Session = Depends(get_db) 
+    db: AsyncSession = Depends(get_db) 
 ):
     # Định nghĩa sẵn cái lỗi 401 chuẩn OAuth2
     credentials_exception = HTTPException(
@@ -30,7 +30,7 @@ async def get_current_user(
         if not username:
             raise credentials_exception
             
-        user_data = get_user(db, username) 
+        user_data = await get_user(db, username) 
         if not user_data:
             raise credentials_exception
             

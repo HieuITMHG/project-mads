@@ -14,12 +14,18 @@ from api.models.session_file import SessionFile
 from core.config import settings
 from core.minio import ensure_bucket_exists
 
-Base.metadata.create_all(bind=engine)
+from contextlib import asynccontextmanager
 
-ensure_bucket_exists(settings.olist_data)
-ensure_bucket_exists(settings.upload_bucket)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    
+    ensure_bucket_exists(settings.olist_data)
+    ensure_bucket_exists(settings.upload_bucket)
+    yield
 
-app = FastAPI(title="MADS APP")
+app = FastAPI(title="MADS APP", lifespan=lifespan)
 
 app.include_router(chat.router)
 app.include_router(user.router)

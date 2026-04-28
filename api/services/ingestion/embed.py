@@ -1,15 +1,17 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from core.qdrant import client
 from core.embedder import embedder
 from api.models.chunk  import DocumentChunk
 from qdrant_client.models import PointStruct
 from core.config import settings
 
-def embed_chunks(db: Session, sessionfile_id: int, batch_size: int = 32):
-    chunks = db.query(DocumentChunk).filter(
+async def embed_chunks(db: AsyncSession, sessionfile_id: int, batch_size: int = 32):
+    req_chunks = await db.execute(select(DocumentChunk).filter(
         DocumentChunk.session_file_id == sessionfile_id,
         DocumentChunk.status == "PENDING"
-    ).all()
+    ))
+    chunks = req_chunks.scalars().all()
 
     if not chunks:
         print("Không có chunk nào cần xử lý.")
@@ -43,5 +45,5 @@ def embed_chunks(db: Session, sessionfile_id: int, batch_size: int = 32):
         for chunk in batch:
             chunk.status = "COMPLETED"
 
-        db.commit()
+        await db.commit()
         print(f"Đã upload batch {i//batch_size + 1} thành công.")

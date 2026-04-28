@@ -7,7 +7,8 @@ from api.models.session_file import SessionFile
 
 import hashlib
 import os
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 
 def calculate_file_hash(file_path: str) -> str:
@@ -17,18 +18,19 @@ def calculate_file_hash(file_path: str) -> str:
             sha256_hash.update(byte_block)
     return sha256_hash.hexdigest()
 
-def upload_to_s3(file_path: str, 
+async def upload_to_s3(file_path: str, 
                 unique_filename: str, 
                 original_filename: str, 
                 chatbox_id: int, 
                 content_type: str, 
                 file_size: int,
-                db: Session):
+                db: AsyncSession):
     try:
         is_physic_exist = False
         sessionfile_id = 0
         file_hash = calculate_file_hash(file_path)
-        physic_file = db.query(PhysicFile).filter(PhysicFile.file_hash == file_hash).first()
+        req_physic = await db.execute(select(PhysicFile).filter(PhysicFile.file_hash == file_hash))
+        physic_file = req_physic.scalar_one_or_none()
 
         if not physic_file:
             s3_path = f"raw/{original_filename}"
@@ -46,14 +48,15 @@ def upload_to_s3(file_path: str,
             )
 
             db.add(physic_file)
-            db.flush()
+            await db.flush()
             print("Đã upload file mới")
         else:
             is_physic_exist = True
             print("File vật lý đã upload rồi")
 
-        exist_session_file = db.query(SessionFile).filter(SessionFile.chatbox_id == chatbox_id,
-                                                    SessionFile.physic_file_id == physic_file.id).first()
+        req_session = await db.execute(select(SessionFile).filter(SessionFile.chatbox_id == chatbox_id,
+                                                    SessionFile.physic_file_id == physic_file.id))
+        exist_session_file = req_session.scalar_one_or_none()
         
         if not exist_session_file:
             session_file = SessionFile(
@@ -64,7 +67,7 @@ def upload_to_s3(file_path: str,
             )
 
             db.add(session_file)
-            db.flush()
+            await db.flush()
             sessionfile_id = session_file.id
             print("Đã upload session file mới")
         else:

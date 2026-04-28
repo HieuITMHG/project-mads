@@ -2,13 +2,13 @@ import os
 import zipfile
 import pandas as pd
 from pathlib import Path
-from sqlalchemy import text
+from sqlalchemy import text, create_engine # Bổ sung create_engine
 from kaggle.api.kaggle_api_extended import KaggleApi
 
-from core.postgres import engine
+# Bỏ import engine cũ đi
+# from core.postgres import engine 
 from core.minio import s3_client, ensure_bucket_exists
 from core.config import settings
-
 from api.models.base import Base
 
 DATASET_NAME = "olistbr/brazilian-ecommerce"
@@ -24,9 +24,15 @@ FILE_TABLE_MAP = [
     ("olist_order_payments_dataset.csv", "olist_order_payments")
 ]
 
+# TẠO MỘT SYNC ENGINE RIÊNG CHO PANDAS
+# Lưu ý: Không có '+asyncpg' ở đây
+SYNC_DATABASE_URL = f"postgresql+psycopg://{settings.postgres_user}:{settings.postgres_password}@{settings.postgres_host}:{settings.postgres_port}/{settings.postgres_db}"
+sync_engine = create_engine(SYNC_DATABASE_URL, echo=False)
+
 def check_data_exists() -> bool:
     try:
-        with engine.connect() as conn:
+        # Thay engine -> sync_engine
+        with sync_engine.connect() as conn:
             result = conn.execute(text("SELECT COUNT(*) FROM olist_orders"))
             return result.scalar() > 0
     except Exception:
@@ -36,7 +42,6 @@ def download_from_kaggle():
     print("Đang kết nối Kaggle và tải Dataset ...")
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
     
-    # Khởi tạo API Kaggle (tự động đọc KAGGLE_USERNAME và KAGGLE_KEY từ env)
     api = KaggleApi()
     api.authenticate()
     
@@ -59,7 +64,8 @@ def upload_raw_to_minio():
 
 def ingest_to_postgres():
     print("🚀 Bắt đầu tạo cấu trúc bảng (Schema)...")
-    Base.metadata.create_all(bind=engine)
+    # Thay engine -> sync_engine
+    Base.metadata.create_all(bind=sync_engine)
 
     print("🚀 Bắt đầu đọc CSV và đẩy vào PostgreSQL...")
     for file_name, table_name in FILE_TABLE_MAP:
@@ -72,7 +78,8 @@ def ingest_to_postgres():
         chunk_iter = pd.read_csv(file_path, chunksize=10000)
         
         for chunk in chunk_iter:
-            chunk.to_sql(name=table_name, con=engine, if_exists="append", index=False)
+            # Thay engine -> sync_engine
+            chunk.to_sql(name=table_name, con=sync_engine, if_exists="append", index=False)
             
         print(f"✅ Import thành công bảng {table_name}!")
 

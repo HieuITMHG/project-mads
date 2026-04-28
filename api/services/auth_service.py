@@ -1,7 +1,7 @@
 from datetime import timedelta, datetime, timezone
 from pwdlib import PasswordHash
 import jwt
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.repositories.user_repo import get_user
 from core.config import settings
@@ -15,9 +15,9 @@ def verify_password(plain, hashed):
 def decode_token(token: str):
     return jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
 
-def authenticate_user(db: Session, username: str, password: str):
+async def authenticate_user(db: AsyncSession, username: str, password: str):
     # Chuyền db xuống cho get_user
-    user = get_user(db, username) 
+    user = await get_user(db, username) 
 
     if not user:
         verify_password(password, DUMMY_HASH)

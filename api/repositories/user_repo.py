@@ -1,8 +1,8 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from api.models.user import User
 
-def get_user(db: Session, username: str):
-    user = db.query(User).filter(User.username == username).first()
+async def get_user(db: AsyncSession, username: str):
+    result = await db.execute(select(User).filter(User.username == username))
+    user = result.scalar_one_or_none()
     return user
-    
-    

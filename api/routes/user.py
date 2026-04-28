@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 from core.postgres import get_db
 from api.models.user import User
@@ -15,9 +16,10 @@ router = APIRouter(tags=["Auth"])
 # 1. API ĐĂNG KÝ (REGISTER)
 # ==========================================
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
+async def register_user(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     # Kiểm tra xem user đã tồn tại chưa
-    user_exists = db.query(User).filter(User.username == user_data.username).first()
+    result = await db.execute(select(User).filter(User.username == user_data.username))
+    user_exists = result.scalar_one_or_none()
     if user_exists:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -33,8 +35,8 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
         hashed_password=hashed_pw
     )
     db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    await db.commit()
+    await db.refresh(new_user)
     
     return {"message": "Đăng ký thành công!", "username": new_user.username}
 
@@ -43,11 +45,9 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
 # Lưu ý: Đường dẫn này PHẢI KHỚP với tokenUrl="login" bạn set ở OAuth2PasswordBearer
 # ==========================================
 @router.post("/login")
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
     # Xác thực user (Sử dụng hàm authenticate_user bạn đã viết)
-    # Lưu ý: Hàm authenticate_user của bạn gọi get_user(username). 
-    # Nếu get_user chưa có DB Session, bạn cần truyền db vào cho nó.
-    user = authenticate_user(db, form_data.username, form_data.password)
+    user = await authenticate_user(db, form_data.username, form_data.password)
     
     if not user:
         raise HTTPException(
@@ -69,7 +69,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 # 3. API ĐĂNG XUẤT (LOGOUT)
 # ==========================================
 @router.post("/logout")
-def logout(current_user: User = Depends(get_current_user)):
+async def logout(current_user: User = Depends(get_current_user)):
     """
     SỰ THẬT VỀ JWT LOGOUT:
     JWT là Stateless (Phi trạng thái). Server không lưu Token, nên không thể "xóa" Token từ phía Server.

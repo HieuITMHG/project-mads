@@ -1,6 +1,6 @@
 import re
 import tiktoken
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.chunk import DocumentChunk
 
 sicbh_include_headers_in_content = False
@@ -174,7 +174,7 @@ def split_chunk_by_tokens(content, tokenizer, max_tokens):
 
     return chunks
 
-def split_markdown(md_doc: str, db: Session, sessionfile_id: int):
+async def split_markdown(md_doc: str, db: AsyncSession, sessionfile_id: int):
     chunks = split_into_chunks_by_headers(md_doc=md_doc)
     
     db_chunks = []
@@ -188,7 +188,7 @@ def split_markdown(md_doc: str, db: Session, sessionfile_id: int):
 
         try:
             db.add_all(db_chunks)
-            db.flush()
+            await db.flush()
             print("Đã chunk và lưu chunk vào db thành công")
         except Exception as e:
             print(e)

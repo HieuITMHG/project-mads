@@ -1,6 +1,7 @@
 from core.minio import s3_client
 from core.config import settings
 from api.enums.file_status import FileStatus
+from api.enums.file_type import FileType
 
 from api.models.physic_file import PhysicFile
 from api.models.session_file import SessionFile
@@ -9,6 +10,50 @@ import hashlib
 import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+
+import pandas as pd
+
+def extract_metadata_from_path(file_path: str, mime_type: str, filename: str) -> dict | None:
+
+    valid_mime_types = [
+        "text/csv", 
+        "application/vnd.ms-excel", 
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    ]
+    
+    is_spreadsheet = mime_type in valid_mime_types or filename.lower().endswith((".csv", ".xls", ".xlsx"))
+    
+    if not is_spreadsheet:
+        return None
+
+    try:
+        if filename.lower().endswith(".csv") or mime_type == "text/csv":
+            try:
+                df = pd.read_csv(file_path, nrows=2)
+            except Exception:
+                df = pd.read_csv(file_path, nrows=2, encoding='latin1', sep=None, engine='python')
+        else:
+            df = pd.read_excel(file_path, nrows=2)
+
+        def serialize_sample(val):
+            if pd.isna(val): return None
+            if hasattr(val, 'isoformat'): return val.isoformat()
+            return val
+
+        sample_data = [
+            {k: serialize_sample(v) for k, v in row.items()} 
+            for row in df.head(2).to_dict(orient="records")
+        ]
+
+        return {
+            "type": "spreadsheet",
+            "columns": list(df.columns),
+            "dtypes": {col: str(dtype) for col, dtype in df.dtypes.items()},
+            "sample_data": sample_data
+        }
+    except Exception as e:
+        print(f"Lỗi trích xuất metadata từ {file_path}: {e}")
+        return None
 
 
 def calculate_file_hash(file_path: str) -> str:
@@ -40,11 +85,14 @@ async def upload_to_s3(file_path: str,
                 Key=s3_path
             )
 
+            metadata = extract_metadata_from_path(file_path, content_type, original_filename)
+
             physic_file = PhysicFile(
                 file_hash=file_hash,
                 s3_path=s3_path,
                 file_size=file_size,
-                mime_type=content_type
+                mime_type=content_type,
+                metadata_data=metadata
             )
 
             db.add(physic_file)

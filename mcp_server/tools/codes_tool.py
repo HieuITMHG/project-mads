@@ -3,7 +3,7 @@ import httpx
 
 @mcp.tool()
 async def run_data_analysis(code: str) -> str:
-    """Thực thi mã Python để phân tích dữ liệu và vẽ biểu đồ."""
+    """execute python code to analyze data and draw chart"""
     async with httpx.AsyncClient(timeout=20.0) as client:
         response = await client.post(
             "http://sandbox_api:8002/execute",

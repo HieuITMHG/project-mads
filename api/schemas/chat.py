@@ -1,26 +1,41 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
+from typing import Optional, Any
 
-# ==========================================
-# SCHEMA CHO MESSAGE
-# ==========================================
+from api.models.message import Message
+from api.schemas.file import SessionFileResponse
+
 class MessageResponse(BaseModel):
     id: int
     chatbox_id: int
-    role: str       # Thường là "user" hoặc "assistant" (bot)
-    content: str    # Nội dung tin nhắn
+    role: str       
+    content: str    
+    metadata_data: Optional[dict[str, Any]] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 
-# ==========================================
-# SCHEMA CHO CHATBOX
-# ==========================================
 class ChatBoxResponse(BaseModel):
     id: int
     user_id: int
     title: str
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ApprovalRequest(BaseModel):
+    action: str  
+    edited_args: dict | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class ChatHistoryResponse(BaseModel):
+    chatbox_id: int 
+    title: str      
+    
+    messages: list[MessageResponse] = []
+    session_files: list[SessionFileResponse] = []
 
     model_config = ConfigDict(from_attributes=True)

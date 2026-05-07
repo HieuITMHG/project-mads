@@ -31,7 +31,9 @@ async def async_ingest_upload_file(temp_path: str, unique_filename: str, content
                         file_size=file_size,
                         db=db)
             print("Đã upload xong!!!")
-            
+            print("=================Đây là loại file================")
+            print(content_type)
+            print("="*100)
             if content_type == FileType.XLSX.value or content_type==FileType.CSV.value:
                 await db.commit()
                 return {"message": "Upload successfully!!"}

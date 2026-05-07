@@ -28,6 +28,15 @@ api = [
     "tiktoken>=0.12.0",
     "qdrant-client>=1.17.1",
     "sentence-transformers>=5.4.1",
+    "langgraph>=1.1.10",
+    "langchain-core>=1.3.2",
+    "langgraph-checkpoint-postgres>=3.0.5",
+    "psycopg-pool>=3.3.1",
+    "psycopg[binary]>=3.3.3",
+    "langchain-openai>=1.2.1",
+    "langchain>=1.2.17",
+    "mcp>=1.27.0",
+    "langchain-mcp-adapters>=0.2.2",
 ]
 ingestion = [
     "pandas>=3.0.2",

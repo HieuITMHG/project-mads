@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     qdrant_key: str
     upload_collection:str
 
+    mcp_server_url: str
+
+    openai_api_key: str
+
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / f".env.{os.getenv('ENV_STATE', 'dev')}",
         env_file_encoding="utf-8",

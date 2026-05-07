@@ -4,7 +4,7 @@ from sqlalchemy import text
 
 @mcp.tool()
 def execute_readonly_sql(query: str) -> str:
-    """Thực thi lệnh SQL an toàn trên DB Olist."""
+    """Execute secure sql to query Olist ecommerce database"""
     db_gen = get_db_readonly()
     db = next(db_gen)
     try:

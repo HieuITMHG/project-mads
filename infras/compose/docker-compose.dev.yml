@@ -118,6 +118,8 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
+      mcp_server:
+        condition: service_healthy
 
     ports:
       - "8000:8000"
@@ -173,6 +175,9 @@ services:
     environment:
       - MCP_PORT=${MCP_PORT}
       - MCP_HOST=${MCP_HOST}
+    healthcheck:
+      <<: *healthcheck_base
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('127.0.0.1', 8001))\" || exit 1"]
 
   sandbox_api:
     build:

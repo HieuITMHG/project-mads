@@ -1,0 +1,1 @@
+uv add langgraph langchain-core langgraph-checkpoint-postgres psycopg-pool psycopg[binary] langchain-openai --optional api

@@ -87,13 +87,26 @@ async def chat_stream(
         )
         
         for session_file, physic_file in files_req.all():
-            schema_json = physic_file.metadata_data if physic_file.metadata_data else "Không có cấu trúc rõ ràng"
-            file_context_str += f"""
-            - Tên file: {session_file.filename}
-            - Đường dẫn vật lý (Pandas có thể đọc): {physic_file.s3_path}
-            - Cấu trúc dữ liệu: {schema_json}
-            -------------------
-            """
+            mime = physic_file.mime_type.lower()
+            
+            if "spreadsheet" in mime or "excel" in mime or "csv" in mime:
+                schema_json = physic_file.metadata_data if physic_file.metadata_data else "Không có cấu trúc rõ ràng"
+                file_context_str += f"""
+                - 📊 [DATA FILE]: {session_file.filename}
+                - Phân loại: Dữ liệu dạng bảng (Sử dụng công cụ 'run_python' với pandas để phân tích).
+                - Đường dẫn vật lý: {physic_file.s3_path}
+                - Cấu trúc: {schema_json}
+                -------------------
+                """
+            
+            else:
+                file_context_str += f"""
+                - 📄 [DOCUMENT FILE]: {session_file.filename}
+                - ID Tài liệu: {session_file.id}
+                - Phân loại: Văn bản phi cấu trúc.
+                - Hướng dẫn: Không có schema. Để đọc nội dung file này, HÃY SỬ DỤNG CÔNG CỤ 'search_rag' và truyền ID Tài liệu ({session_file.id}) cùng với từ khóa tìm kiếm.
+                -------------------
+                """
 
     config = {"configurable": {"thread_id": str(chatbox_id)}}
     input_state = {

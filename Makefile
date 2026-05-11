@@ -14,6 +14,9 @@ up:
 down:
 	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) down
 
+down-v:
+	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) down -v
+
 build:
 	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) build
 

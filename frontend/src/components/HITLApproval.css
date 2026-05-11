@@ -1,0 +1,75 @@
+.hitl-card {
+  margin: var(--spacing-4) 0;
+  border-color: rgba(245, 158, 11, 0.3);
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.hitl-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-3) var(--spacing-4);
+  background: rgba(245, 158, 11, 0.1);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.hitl-header h4 {
+  margin: 0;
+  color: #fcd34d;
+  font-size: 0.95rem;
+}
+
+.text-warning {
+  color: #f59e0b;
+}
+
+.bg-success {
+  background: #10b981;
+}
+
+.bg-success:hover {
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+}
+
+.hitl-body {
+  padding: var(--spacing-4);
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.hitl-pre {
+  background: rgba(0, 0, 0, 0.3);
+  padding: var(--spacing-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  font-size: 0.85rem;
+  overflow-x: auto;
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  word-break: break-all;
+  max-width: 100%;
+}
+
+.hitl-textarea {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text-primary);
+  border: 1px solid var(--border-focus);
+  padding: var(--spacing-3);
+  border-radius: var(--radius-md);
+  font-family: monospace;
+  font-size: 0.85rem;
+  resize: vertical;
+  outline: none;
+}
+
+.hitl-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-2);
+  padding: var(--spacing-3) var(--spacing-4);
+  background: rgba(15, 23, 42, 0.5);
+  border-top: 1px solid var(--border-color);
+}

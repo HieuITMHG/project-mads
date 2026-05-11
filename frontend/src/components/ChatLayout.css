@@ -1,0 +1,25 @@
+.chat-layout {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background-color: var(--bg-primary);
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: radial-gradient(circle at top right, rgba(59, 130, 246, 0.05), transparent 50%);
+}
+
+.empty-state {
+  height: 100%;
+  width: 100%;
+}
+
+.empty-state h2 {
+  font-size: 2rem;
+  margin-bottom: var(--spacing-4);
+}

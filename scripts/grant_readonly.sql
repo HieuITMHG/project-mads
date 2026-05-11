@@ -1,7 +1,5 @@
 GRANT CONNECT ON DATABASE ecommerce TO readonly_user;
 
-\c mydb
-
 GRANT USAGE ON SCHEMA public TO readonly_user;
 
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM readonly_user;

@@ -2,11 +2,33 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir pandas matplotlib numpy seaborn scipy
+RUN pip install --upgrade pip
+
+
+RUN pip install --no-cache-dir \
+    # 1. Core Data Manipulation & Math
+    pandas \
+    numpy \
+    scipy \
+    \
+    # 2. File Parsers (Đọc đa dạng định dạng dữ liệu)
+    openpyxl \
+    pyarrow \
+    fastparquet \
+    \
+    # 3. Data Visualization
+    plotly \
+    matplotlib \
+    seaborn \
+    \
+    # 4. Machine Learning & Statistics (Cho các task dự đoán, phân cụm)
+    scikit-learn \
+    statsmodels \
+    \
+    # 5. Phụ trợ hiển thị (Cho một số hàm Pandas nâng cao)
+    jinja2
 
 RUN groupadd -g 1410 appgroup && \
     useradd -u 1410 -g appgroup -m -s /bin/bash appuser
 
 USER appuser
-
-# docker build -t mads-sandbox-base -f infras/docker/Dockerfile.sandbox .

@@ -4,9 +4,8 @@ from api.services.ingestion.upload import upload_to_s3
 from api.services.ingestion.parse import parse_file
 from api.services.ingestion.chunk import split_markdown
 from api.services.ingestion.embed import embed_chunks
-from core.postgres import SessionLocal
-
-
+from core.postgres import DATABASE_URL
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 import asyncio
 
 @celery.task(name="ingest_upload_file")
@@ -20,7 +19,10 @@ def ingest_upload_file(temp_path: str,
     return asyncio.run(async_ingest_upload_file(temp_path, unique_filename, content_type, original_filename, chatbox_id, user_id, file_size))
 
 async def async_ingest_upload_file(temp_path: str, unique_filename: str, content_type: str, original_filename: str, chatbox_id: int, user_id: int, file_size: int):
-    async with SessionLocal() as db:
+    local_engine = create_async_engine(DATABASE_URL, echo=False)
+    LocalSession = async_sessionmaker(autocommit=False, autoflush=False, bind=local_engine, class_=AsyncSession)
+    
+    async with LocalSession() as db:
         try:
             print("Đang upload và tạo session file!!!")
             result = await upload_to_s3(file_path=temp_path,
@@ -49,3 +51,6 @@ async def async_ingest_upload_file(temp_path: str, unique_filename: str, content
         except Exception as e:
             await db.rollback()
             raise e
+
+        finally:
+            await local_engine.dispose()

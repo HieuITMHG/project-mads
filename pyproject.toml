@@ -37,6 +37,7 @@ api = [
     "langchain>=1.2.17",
     "mcp>=1.27.0",
     "langchain-mcp-adapters>=0.2.2",
+    "httpx>=0.28.1",
 ]
 ingestion = [
     "pandas>=3.0.2",
@@ -53,6 +54,9 @@ sandbox = [
     "fastapi",
     "uvicorn",
     "docker>=7.1.0",
+    "plotly>=6.7.0",
+    "minio>=7.2.20",
+    "apscheduler>=3.11.2",
 ]
 
 [tool.uv.sources]

@@ -111,6 +111,7 @@ async def upload_to_s3(file_path: str,
                 chatbox_id=chatbox_id,
                 physic_file_id=physic_file.id,
                 filename=unique_filename,
+                display_filename=original_filename,
                 status=FileStatus.PENDING.value
             )
 
@@ -124,8 +125,9 @@ async def upload_to_s3(file_path: str,
 
         return {"status": "Success", "file": original_filename, "is_physic_exist": is_physic_exist, "sessionfile_id": sessionfile_id}
     except Exception as e:
-        print(e)
+        print(f"Lỗi trong upload_to_s3: {e}")
         if os.path.exists(file_path):
             os.remove(file_path)
+        raise e
     finally:
         print("Đã hoàn thành upload")

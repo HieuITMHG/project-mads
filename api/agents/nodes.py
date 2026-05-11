@@ -2,6 +2,7 @@ from api.agents.tools.rag import search_rag
 import core.checkpointer as cp
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage
+from langchain_core.runnables import RunnableConfig
 from core.config import settings
 from api.agents.olist_schema import OLIST_DB_SCHEMA
 
@@ -19,14 +20,16 @@ You have access to the following tools:
 CRITICAL INSTRUCTIONS:
 1. DATA ACCURACY: NEVER hallucinate data, metrics, or column names. Always use the 'execute_sql' or 'run_python' tools to fetch real data before answering.
 2. HANDLING ERRORS: If a tool returns an error, DO NOT panic. Read the error message, correct your code, and call the tool again.
-3. VISUALIZATION (PLOTLY RULE): If the user asks for a chart/graph, you MUST strictly use the `plotly.express` or `plotly.graph_objects` library. Do NOT use `fig.show()`. Instead, extract the JSON representation using `fig.to_json()`, print it, and in your final response to the user, wrap that EXACT JSON string inside <CHART_JSON>...</CHART_JSON> tags.
-4. TABLE STRUCTURE: Pay attention to the relationships between tables in the Olist Database.
+3. VISUALIZATION (PLOTLY RULE): If the user asks for a chart/graph, you MUST strictly use the `plotly.express` or `plotly.graph_objects` library. Do NOT use `fig.show()`. Instead, extract the JSON representation using `fig.to_json()`, WRAP it in a `print()` call: `print(fig.to_json())`. In your final response, wrap the EXACT printed JSON string inside <CHART_JSON>...</CHART_JSON> tags.
+   - ABSOLUTE RULE: You may ONLY include <CHART_JSON> in your response if the tool's Execution results literally contain the chart JSON string. If the tool returned a WARNING about empty output, you MUST fix your code and call the tool again — NEVER invent or fabricate chart JSON from memory.
+4. CRITICAL: You are writing a standard Python script, NOT a Jupyter Notebook. You MUST explicitly use `print()` statements to output your final answers or data summaries. If you don't use `print()`, you will receive an empty output and MUST rewrite the code.
+5. TABLE STRUCTURE: Pay attention to the relationships between tables in the Olist Database.
 
 LANGUAGE RULE: 
-You must perform all reasoning, coding, and database querying in English. However, YOUR FINAL RESPONSE TO THE USER MUST BE IN FLUENT VIETNAMESE, formatted cleanly using Markdown.
+You must perform all reasoning, coding, and database querying in English, formatted cleanly using Markdown.
 """
 
-async def agent_reasoning_node(state: dict):
+async def agent_reasoning_node(state: dict, config: RunnableConfig):
     print("Agent đang suy nghĩ")
 
     llm = ChatOpenAI(
@@ -52,6 +55,6 @@ async def agent_reasoning_node(state: dict):
 
     messages = [SystemMessage(content=dynamic_system_prompt)] + state["messages"]
 
-    response = await llm_with_tools.ainvoke(messages)
+    response = await llm_with_tools.ainvoke(messages, config)
 
     return {"messages": [response]}

@@ -37,5 +37,6 @@ class ChatHistoryResponse(BaseModel):
     
     messages: list[MessageResponse] = []
     session_files: list[SessionFileResponse] = []
+    pending_tools: Optional[list[Any]] = None
 
     model_config = ConfigDict(from_attributes=True)

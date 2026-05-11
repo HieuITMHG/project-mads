@@ -63,7 +63,8 @@ backend/tmp/
 backend/uploads/
 
 # --- Frontend (không cần cho backend image) ---
-frontend/
+frontend/node_modules/
+frontend/dist/
 
 # --- Infras (không cần copy vào image) ---
 infras/

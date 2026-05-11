@@ -31,7 +31,7 @@ services:
       - "${POSTGRES_PORT}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./init:/01-create-readonly-user.sh
+      - ./init:/docker-entrypoint-initdb.d
     healthcheck:
       <<: *healthcheck_base
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
@@ -92,8 +92,10 @@ services:
       - ../../scripts:/scripts
     entrypoint: >
       bash -c "
-      export PGPASSWORD=$POSTGRES_PASSWORD &&
-      psql -h postgres -U $POSTGRES_USER -d $POSTGRES_DB -f /scripts/grant_readonly.sql
+      export PGPASSWORD=$$POSTGRES_PASSWORD &&
+      (psql -h postgres -U $$POSTGRES_USER -d $$POSTGRES_DB -c \"CREATE USER readonly_user;\" || true) &&
+      psql -h postgres -U $$POSTGRES_USER -d $$POSTGRES_DB -c \"ALTER USER readonly_user WITH PASSWORD '$$READONLY_PASSWORD';\" &&
+      psql -h postgres -U $$POSTGRES_USER -d $$POSTGRES_DB -f /scripts/grant_readonly.sql
       "
 
   api:
@@ -184,16 +186,36 @@ services:
       context: ../../
       dockerfile: infras/docker/Dockerfile.sandbox_api
     environment:
-      - HOST_SHARED_TMP_DIR=${HOST_SHARED_TMP_DIR}
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - OLIST_DATA=${OLIST_DATA}
+      - UPLOAD_BUCKET=${UPLOAD_BUCKET}
+
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ../../shared_tmp:/tmp/uploads
       - ../../sandbox_api:/app/sandbox_api
+      - mads_shared_vol:/workspace
     ports:
       - "8002:8002"
+
+  frontend:
+    build:
+      context: ../../
+      dockerfile: infras/docker/Dockerfile.frontend
+    ports:
+      - "3000:5173"
+    volumes:
+      - ../../frontend:/app
+      - /app/node_modules
+    depends_on:
+      api:
+        condition: service_started
 
 volumes:
   pgdata:
   minio_data:
   redis_data:
   qdrant_data:
+  mads_shared_vol:
+    name: mads_shared_vol

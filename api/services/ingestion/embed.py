@@ -45,5 +45,5 @@ async def embed_chunks(db: AsyncSession, sessionfile_id: int, batch_size: int = 
         for chunk in batch:
             chunk.status = "COMPLETED"
 
-        await db.commit()
+        await db.flush()
         print(f"Đã upload batch {i//batch_size + 1} thành công.")

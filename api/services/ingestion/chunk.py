@@ -186,11 +186,11 @@ async def split_markdown(md_doc: str, db: AsyncSession, sessionfile_id: int):
         )
         db_chunks.append(new_chunk)
 
-        try:
-            db.add_all(db_chunks)
-            await db.flush()
-            print("Đã chunk và lưu chunk vào db thành công")
-        except Exception as e:
-            print(e)
+    try:
+        db.add_all(db_chunks)
+        await db.flush()
+        print("Đã chunk và lưu chunk vào db thành công")
+    except Exception as e:
+        print(e)
         
 

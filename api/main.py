@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from api.routes import chat
 from api.routes import user
 from api.routes import doc
@@ -94,6 +95,14 @@ async def lifespan(app: FastAPI):
         print("Đã đóng kết nối Checkpointer Pool an toàn.")
 
 app = FastAPI(title="MADS APP", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Cho phép tất cả các origin (bạn có thể thay đổi để bảo mật hơn)
+    allow_credentials=True,
+    allow_methods=["*"],  # Cho phép tất cả HTTP methods (GET, POST, PUT, DELETE, v.v.)
+    allow_headers=["*"],  # Cho phép tất cả headers
+)
 
 app.include_router(chat.router)
 app.include_router(user.router)

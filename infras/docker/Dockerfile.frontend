@@ -1,0 +1,18 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files first to leverage Docker cache
+COPY frontend/package.json frontend/package-lock.json* ./
+
+# Install dependencies
+RUN npm install
+
+# Copy all source code
+COPY frontend/ .
+
+# Expose Vite's default port
+EXPOSE 5173
+
+# Start Vite server, bound to all network interfaces
+CMD ["npm", "run", "dev", "--", "--host"]

@@ -53,3 +53,19 @@ async def upload_doc(file: Annotated[UploadFile, File(description="Upload file f
         "chatbox_id": chatbox_id,
         "status": "Processing"
     }
+
+from core.worker import celery
+
+@router.get("/task/{task_id}")
+async def get_task_status(task_id: str):
+    task = celery.AsyncResult(task_id)
+    if task.state == 'FAILURE':
+        response = {
+            'state': task.state,
+            'error': str(task.info)
+        }
+    else:
+        response = {
+            'state': task.state,
+        }
+    return response

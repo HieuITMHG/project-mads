@@ -1,42 +1,96 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-import uuid
 import os
 import docker
+from sandbox_api.utils.file_utils import download_all_files
+import shutil
+import time
+from contextlib import asynccontextmanager
+from apscheduler.schedulers.background import BackgroundScheduler
 
 client = docker.from_env()
 
-app = FastAPI(title="MADS Sandbox API")
+DOCKER_VOLUME_NAME = "mads_shared_vol" 
+API_WORKSPACE_DIR = "/workspace"  
+TTL_SECONDS = 3600   
+
+def cleanup_expired_workspaces():
+    """Hàm chạy ngầm quét dọn các folder hết hạn"""
+    now = time.time()
+    print("[Garbage Collector] Đang quét dọn workspace...")
+    
+    if not os.path.exists(API_WORKSPACE_DIR):
+        return
+
+    for session_folder in os.listdir(API_WORKSPACE_DIR):
+        folder_path = os.path.join(API_WORKSPACE_DIR, session_folder)
+        
+        if os.path.isdir(folder_path):
+            folder_mtime = os.stat(folder_path).st_mtime
+            
+            if folder_mtime < (now - TTL_SECONDS):
+                try:
+                    shutil.rmtree(folder_path)
+                    print(f"Đã xóa workspace hết hạn: {session_folder}")
+                except Exception as e:
+                    print(f"Lỗi xóa {session_folder}: {e}")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(cleanup_expired_workspaces, 'interval', minutes=15)
+    scheduler.start()
+    yield
+    scheduler.shutdown()
+
+app = FastAPI(title="MADS Sandbox API", lifespan=lifespan)
 
 class CodeRequest(BaseModel):
+    session_id: str 
     code: str
+
+class PrepareRequest(BaseModel):
+    session_id: str 
+    s3_path_lst: list[str]
+
+
+@app.post("/prepare_file_data")
+async def prepare_file_data(request: PrepareRequest):
+    try:
+        session_dir = os.path.join(API_WORKSPACE_DIR, request.session_id)
+
+        download_all_files(request.s3_path_lst, session_dir)
+        return {"Prepare file result": "Success"}
+    except Exception as e:
+        print(e)
+        return {"Prepare file result": "Fail"}
+
 
 @app.post("/execute")
 async def execute_code(request: CodeRequest):
-    session_id = str(uuid.uuid4())
+    session_id = request.session_id
+    
+    session_dir = os.path.join(API_WORKSPACE_DIR, session_id)
+    os.makedirs(session_dir, exist_ok=True)
+    os.chmod(session_dir, 0o777)
 
-    api_workspace = f"/tmp/uploads/{session_id}"
-    os.makedirs(api_workspace, exist_ok=True)
-
-    os.chmod(api_workspace, 0o777)
-
-    with open(os.path.join(api_workspace, "script.py"), "w") as f:
+    script_path = os.path.join(session_dir, "script.py")
+    with open(script_path, "w") as f:
         f.write(request.code)
-
-    host_shared_tmp = os.getenv("HOST_SHARED_TMP_DIR")
-    host_session_path = f"{host_shared_tmp}/{session_id}"
 
     try:
         container = client.containers.run(
             image="mads-sandbox-base",
             command=["python", "script.py"],
-            volumes={host_session_path: {'bind': '/app', 'mode': 'rw'}},
+            volumes={
+                DOCKER_VOLUME_NAME: {'bind': '/workspace', 'mode': 'rw'}
+            },
+
+            working_dir=f"/workspace/{session_id}", 
             network_disabled=True, 
             mem_limit="512m",        
             cpu_quota=100000,          
-            read_only=True,            
-            tmpfs={'/tmp': '', '/home/appuser': ''}, 
-            security_opt=["no-new-privileges"],
+
             detach=True
         )
 
@@ -44,12 +98,11 @@ async def execute_code(request: CodeRequest):
         logs = container.logs().decode("utf-8")
         container.remove(force=True)
 
-        files = [f for f in os.listdir(api_workspace) if f != "script.py"]
+        is_success = result["StatusCode"] == 0
 
         return {
-            "success": result["StatusCode"] == 0,
+            "success": is_success,
             "logs": logs,
-            "files": [f"{session_id}/{f}" for f in files]
         }
     except Exception as e:
-        return {"success": False, "logs": str(e), "files": []}
+        return {"success": False, "logs": str(e)}

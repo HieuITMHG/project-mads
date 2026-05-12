@@ -1,70 +1,117 @@
-# --- Version Control ---
+# =========================================================
+# Git
+# =========================================================
 .git
 .gitignore
 
-# --- Python ---
+# =========================================================
+# Python
+# =========================================================
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
 
-# Virtual env (mọi vị trí)
+# Virtual environments
 .venv/
 venv/
-ENV/
 env/
+ENV/
 **/.venv/
 **/__pycache__/
 
-# --- Build & Cache ---
-.uv/
-.cache/
+# =========================================================
+# Python tooling / caches
+# =========================================================
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.cache/
+.coverage
+htmlcov/
+
+# =========================================================
+# Build artifacts
+# =========================================================
 build/
 dist/
 *.egg-info/
+.eggs/
 
-# --- Environment & Secrets ---
+# =========================================================
+# Environment / secrets
+# =========================================================
 .env
 .env.*
 !.env.example
+
 *.pem
 *.key
+*.crt
 secrets.json
 
-# --- Editor / OS ---
+# =========================================================
+# Logs
+# =========================================================
+*.log
+
+# =========================================================
+# Editor / OS
+# =========================================================
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
 
-# --- 🔥 QUAN TRỌNG: Backend nặng ---
-backend/.venv/
-backend/data/sample
-backend/**/*.pdf
-backend/**/*.parquet
-backend/**/*.csv
-backend/**/*.json
-backend/**/*.xlsx
+# =========================================================
+# Frontend
+# =========================================================
+frontend/node_modules/
+frontend/dist/
+frontend/.next/
+frontend/.cache/
 
-# --- Logs & runtime ---
-*.log
+# =========================================================
+# Infra / local deployment
+# =========================================================
+infras/
+compose/
 
-# --- Docker volumes (local dev) ---
+# =========================================================
+# Local runtime data
+# =========================================================
+shared_tmp/
+data/sample
+tmp/
+temp/
+
 pgdata/
 minio_data/
 redis_data/
 
-# --- Upload / temp ---
-tmp/
-uploads/
-backend/tmp/
-backend/uploads/
+# =========================================================
+# Experiments / notebooks / notes
+# =========================================================
+experiments/
+notes/
+*.ipynb
 
-# --- Frontend (không cần cho backend image) ---
-frontend/node_modules/
-frontend/dist/
+# =========================================================
+# Large / generated files
+# =========================================================
+*.pdf
+*.parquet
+*.csv
+*.xlsx
 
-# --- Infras (không cần copy vào image) ---
-infras/
+# =========================================================
+# Docker
+# =========================================================
+Dockerfile*
+docker-compose*.yml
+
+# =========================================================
+# Misc
+# =========================================================
+LICENSE
+README.md

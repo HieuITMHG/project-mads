@@ -1,0 +1,263 @@
+x-healthcheck-defaults: &healthcheck_base
+  interval: 10s
+  timeout: 5s
+  retries: 5
+  start_period: 10s
+
+x-postgres-env: &postgres-env
+  POSTGRES_USER: ${POSTGRES_USER}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  POSTGRES_DB: ${POSTGRES_DB}
+
+x-minio-env: &minio-env
+  S3_ENDPOINT: ${S3_ENDPOINT}
+  MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
+  MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
+  UPLOAD_BUCKET: ${UPLOAD_BUCKET}
+  OLIST_DATA: ${OLIST_DATA}
+
+x-qdrant-env: &qdrant-env
+  QDRANT_KEY: ${QDRANT_KEY}
+  QDRANT_ENDPOINT: ${QDRANT_ENDPOINT}
+
+
+services:
+  postgres:
+    image: postgres:${POSTGRES_VERSION}
+    container_name: mads-postgres
+    environment:
+      <<: *postgres-env
+    expose:
+      - "5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d
+    healthcheck:
+      <<: *healthcheck_base
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+    networks:
+      - backend_net
+    restart: always
+
+  qdrant:
+    image: qdrant/qdrant:v1.17
+    expose:
+      - "6333"
+    environment:
+      <<: *qdrant-env
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      <<: *healthcheck_base
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+    networks:
+      - backend_net
+    restart: always
+
+  minio:
+    image: quay.io/minio/minio:latest
+    command: server /data --console-address ":9001"
+    expose:
+      - "9000"
+      - "9001"
+    environment:
+      <<: *minio-env
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      <<: *healthcheck_base
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+    networks:
+      - backend_net
+    restart: always
+
+  ingestion:
+    build:
+      context: ../../
+      dockerfile: infras/docker/Dockerfile.ingestion
+    command: python data/ingestion.py
+    env_file:
+      - ../../.env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - backend_net
+
+  grant_permissions:
+    image: postgres:${POSTGRES_VERSION}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ingestion:
+        condition: service_completed_successfully
+    env_file:
+      - ../../.env.prod
+    volumes:
+      - ../../scripts:/scripts
+    entrypoint: >
+      bash -c "
+      export PGPASSWORD=$$POSTGRES_PASSWORD &&
+      (psql -h postgres -U $$POSTGRES_USER -d $$POSTGRES_DB -c \"CREATE USER readonly_user;\" || true) &&
+      psql -h postgres -U $$POSTGRES_USER -d $$POSTGRES_DB -c \"ALTER USER readonly_user WITH PASSWORD '$$READONLY_PASSWORD';\" &&
+      psql -h postgres -U $$POSTGRES_USER -d $$POSTGRES_DB -f /scripts/grant_readonly.sql
+      "
+    networks:
+      - backend_net
+
+  api:
+    build:
+      context: ../../
+      dockerfile: infras/docker/Dockerfile.api
+    command: >
+      gunicorn api.main:app
+      --workers 9
+      --worker-class uvicorn.workers.UvicornWorker
+      --bind 0.0.0.0:8000
+    env_file:
+      - ../../.env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      ingestion:
+        condition: service_completed_successfully 
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      mcp_server:
+        condition: service_healthy
+
+    expose: 
+      - "8000"
+    volumes:    
+      - ../../shared_tmp:/tmp/uploads
+    image: mads-backend
+    networks:
+      - backend_net
+      - frontend_net
+    restart: always
+    
+  redis:
+    image: redis:7-alpine
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      <<: *healthcheck_base 
+      test: ["CMD", "redis-cli", "ping"]
+    networks:
+      - backend_net
+    restart: always
+  
+  celery_worker:
+    image: mads-backend
+    command: celery -A core.worker worker --loglevel=debug --concurrency=1
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    env_file:
+      - ../../.env.prod
+    volumes:    
+      - ../../shared_tmp:/tmp/uploads
+    networks:
+      - backend_net
+    restart: always
+
+  mcp_server:
+    build:
+      context: ../../
+      dockerfile: infras/docker/Dockerfile.mcp
+    env_file:
+      - ../../.env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose: 
+      - "8001"
+    environment:
+      - MCP_PORT=${MCP_PORT}
+      - MCP_HOST=${MCP_HOST}
+    healthcheck:
+      <<: *healthcheck_base
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('127.0.0.1', 8001))\" || exit 1"]
+    networks:
+      - backend_net
+    restart: always
+
+  sandbox_api:
+    build:
+      context: ../../
+      dockerfile: infras/docker/Dockerfile.sandbox_api
+    environment:
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - OLIST_DATA=${OLIST_DATA}
+      - UPLOAD_BUCKET=${UPLOAD_BUCKET}
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - mads_shared_vol:/workspace
+    expose: 
+      - "8002"
+    networks:
+      - backend_net
+    restart: always
+
+  nginx:
+    build:
+      context: ../../        
+      dockerfile: nginx/Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx-http.conf:/etc/nginx/nginx-http.conf:ro
+      - ./nginx/nginx-https.conf:/etc/nginx/nginx-https.conf:ro
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      api:
+        condition: service_started 
+    networks:
+      - frontend_net  
+    restart: always
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+
+    entrypoint: >
+      /bin/sh -c "
+      certbot certonly --webroot --webroot-path=/var/www/certbot --email admin@suvitech.io.vn --agree-tos --no-eff-email -d suvitech.io.vn --keep-until-expiring;
+      trap exit TERM;
+      while :; do certbot renew; sleep 12h & wait $${!}; done;
+      "
+
+volumes:
+  pgdata:
+  minio_data:
+  redis_data:
+  qdrant_data:
+  mads_shared_vol:
+    name: mads_shared_vol
+  
+networks:
+  backend_net:
+    driver: bridge
+  frontend_net:
+    driver: bridge

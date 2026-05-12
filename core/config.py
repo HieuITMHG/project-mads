@@ -6,7 +6,7 @@ import os
 BASE_DIR = Path(__file__).parents[2].resolve()
 
 class Settings(BaseSettings):
-    env: str
+    env_state: str
 
     postgres_user: str
     postgres_password: str

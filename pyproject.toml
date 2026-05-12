@@ -38,6 +38,7 @@ api = [
     "mcp>=1.27.0",
     "langchain-mcp-adapters>=0.2.2",
     "httpx>=0.28.1",
+    "gunicorn>=26.0.0",
 ]
 ingestion = [
     "pandas>=3.0.2",

@@ -131,11 +131,10 @@ services:
         condition: service_healthy
       mcp_server:
         condition: service_healthy
-
     expose: 
       - "8000"
     volumes:    
-      - ../../shared_tmp:/tmp/uploads
+      - shared_tmp_vol:/tmp/uploads
     image: mads-backend
     networks:
       - backend_net
@@ -170,7 +169,7 @@ services:
     env_file:
       - ../../.env.prod
     volumes:    
-      - ../../shared_tmp:/tmp/uploads
+      - shared_tmp_vol:/tmp/uploads
     networks:
       - backend_net
     restart: always
@@ -256,6 +255,7 @@ volumes:
   qdrant_data:
   mads_shared_vol:
     name: mads_shared_vol
+  shared_tmp_vol:
   
 networks:
   backend_net:

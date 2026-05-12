@@ -224,10 +224,10 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx-http.conf:/etc/nginx/nginx-http.conf:ro
-      - ./nginx/nginx-https.conf:/etc/nginx/nginx-https.conf:ro
-      - ./certbot/conf:/etc/letsencrypt
-      - ./certbot/www:/var/www/certbot
+      - ../../nginx/nginx-http.conf:/etc/nginx/nginx-http.conf:ro
+      - ../../nginx/nginx-https.conf:/etc/nginx/nginx-https.conf:ro
+      - ../../certbot/conf:/etc/letsencrypt
+      - ../../certbot/www:/var/www/certbot
     depends_on:
       api:
         condition: service_started 
@@ -238,8 +238,8 @@ services:
   certbot:
     image: certbot/certbot
     volumes:
-      - ./certbot/conf:/etc/letsencrypt
-      - ./certbot/www:/var/www/certbot
+      - ../../certbot/conf:/etc/letsencrypt
+      - ../../certbot/www:/var/www/certbot
 
     entrypoint: >
       /bin/sh -c "

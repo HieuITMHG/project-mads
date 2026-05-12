@@ -1,3 +1,10 @@
+# Environment variables (chứa thông tin nhạy cảm – không commit)
+.env
+.env.development
+.env.production
+# Giữ lại file template để mọi người tham khảo
+!.env.example
+
 # Logs
 logs
 *.log

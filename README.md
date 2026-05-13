@@ -38,15 +38,25 @@ Hệ thống được thiết kế để phân tích tập dữ liệu **Olist**
 ## Demo & Screenshots
 
 ### 1. Giao diện Chat & Trực quan hóa dữ liệu
-![Giao diện chính](assets\chart_res.png)
+![Giao diện chính]
+<p align="center">
+  <img src="./assets/chart_res.png" alt="Chatbot Demo">
+</p>
 *Người dùng yêu cầu báo cáo doanh thu, Agent tự động viết SQL, lấy data và viết code sinh biểu đồ ngay trên giao diện.*
 
 ### 2. Luồng Human-in-the-Loop (HITL)
-![HITL Demo1](assets\HIL1.png)
+![HITL Demo1]
+<p align="center">
+  <img src="./assets/HIL1.png" alt="Chatbot Demo">
+</p>
 ---
-![HITL Demo1](assets\HIL2.png)
+<p align="center">
+  <img src="./assets/HIL2.png" alt="Chatbot Demo">
+</p>
 ---
-![response](assets\chart_res2.png)
+<p align="center">
+  <img src="./assets/chart_res2.png" alt="Chatbot Demo">
+</p>
 
 *Hệ thống tạm dừng và yêu cầu người dùng xác nhận trước khi cho phép Agent thực thi một đoạn mã phân tích phức tạp.*
 

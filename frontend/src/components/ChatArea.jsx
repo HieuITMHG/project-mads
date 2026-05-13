@@ -174,6 +174,8 @@ const ChatArea = ({ chatboxId }) => {
                 streamContent += event.content;
                 setCurrentStreamText(streamContent);
                 setStreamStatus('');
+                // [DEBUG] uncomment below to trace each token
+                // console.log('[DEBUG token]', event.content);
               } else if (event.type === 'status') {
                 setStreamStatus(event.content);
               } else if (event.type === 'hitl_approval_required') {
@@ -192,6 +194,18 @@ const ChatArea = ({ chatboxId }) => {
       }
 
       if (!hitlTriggered) {
+        // [DEBUG] In toàn bộ nội dung raw từ server
+        console.group('%c[DEBUG] Full stream content from server', 'color: #4ade80; font-weight: bold');
+        console.log(streamContent);
+        console.groupEnd();
+
+        // [DEBUG] Thử parse chart data ngay tại đây
+        const debugParsed = processStreamText(streamContent);
+        console.group('%c[DEBUG] processStreamText result', 'color: #60a5fa; font-weight: bold');
+        console.log('cleanText (first 500 chars):', debugParsed.cleanText?.slice(0, 500));
+        console.log('chartData:', debugParsed.chartData);
+        console.groupEnd();
+
         await fetchHistory(true);
       }
 
@@ -250,7 +264,7 @@ const ChatArea = ({ chatboxId }) => {
         });
         return { type: 'plotly', data: filteredData, layout: extractedLayout };
       }
-    } catch (_) {}
+    } catch (_) { }
     return null;
   };
 
@@ -298,7 +312,7 @@ const ChatArea = ({ chatboxId }) => {
           const cleanText = (text.substring(0, jsonStart) + text.substring(jsonStart + rawJsonStr.length)).trim();
           return { cleanText, chartData };
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     return { cleanText: text, chartData: null };
@@ -333,9 +347,16 @@ const ChatArea = ({ chatboxId }) => {
                 (() => {
                   const processed = processStreamText(msg.content);
                   const chartToRender = msg.metadata_data?.chart || processed.chartData;
-                  if (msg.metadata_data?.chart) {
-                    console.log("[DEBUG] Render history msg chart metadata_data:", msg.metadata_data);
-                  }
+
+                  // [DEBUG] Log tất cả assistant messages để so sánh
+                  console.log(
+                    `[DEBUG msg#${msg.id ?? index}]`,
+                    'has metadata_data.chart:', !!msg.metadata_data?.chart,
+                    '| has processedChartData:', !!processed.chartData,
+                    '| chartToRender:', chartToRender ? `type=${chartToRender.type}, data.length=${chartToRender.data?.length}` : 'null',
+                    '| content preview:', msg.content?.slice(0, 80)
+                  );
+
                   return (
                     <>
                       <div className="markdown-body">
@@ -353,6 +374,7 @@ const ChatArea = ({ chatboxId }) => {
             </div>
           </div>
         ))}
+
 
         {isStreaming && (
           <div className="message-wrapper assistant">

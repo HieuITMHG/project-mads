@@ -35,7 +35,7 @@
   gap: var(--spacing-4);
   max-width: 80%;
   min-width: 0;
-  overflow: hidden;
+  /* overflow: hidden removed — was clipping long responses and charts */
 }
 
 .message-wrapper.user {
@@ -45,6 +45,7 @@
 
 .message-wrapper.assistant {
   max-width: 90%;
+  width: 90%;
 }
 
 /* Prevent long code/pre blocks inside markdown from overflowing */
@@ -85,7 +86,8 @@
   min-width: 0;
   overflow-wrap: break-word;
   word-break: break-word;
-  overflow: hidden;
+  /* overflow: hidden removed — was clipping chart containers */
+  overflow: visible;
 }
 
 .user .message-content {

@@ -161,3 +161,115 @@
 .inline-block { display: inline-block; }
 .mr-1 { margin-right: 0.25rem; }
 .mb-3 { margin-bottom: var(--spacing-3); }
+
+/* ============================================================
+   Step Progress Bar
+   ============================================================ */
+.step-progress-bar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0.55rem 0.75rem;
+  margin-bottom: 0.6rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.06);
+  width: fit-content;
+  max-width: 100%;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  opacity: 0.35;
+  transition: opacity 0.3s ease, color 0.3s ease;
+  white-space: nowrap;
+}
+
+.step.active {
+  opacity: 1;
+}
+
+.step.done {
+  opacity: 0.65;
+}
+
+.step-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+
+.step.active .step-icon {
+  background: rgba(99, 102, 241, 0.2);
+  color: #818cf8;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+}
+
+.step.done .step-icon {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+.step-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #94a3b8);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.step.active .step-label { color: #e2e8f0; }
+.step.done .step-label   { color: #4ade80; }
+
+.tool-name-chip {
+  background: rgba(99,102,241,0.18);
+  color: #a5b4fc;
+  border: 1px solid rgba(99,102,241,0.3);
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.step-elapsed {
+  font-size: 10.5px;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+  margin-left: 2px;
+}
+
+.step-connector {
+  width: 28px;
+  height: 2px;
+  background: rgba(255,255,255,0.08);
+  margin: 0 4px;
+  border-radius: 1px;
+  flex-shrink: 0;
+  transition: background 0.4s ease;
+}
+
+.step-connector.done {
+  background: rgba(34, 197, 94, 0.35);
+}
+
+/* ============================================================
+   Tool Log inside message list
+   ============================================================ */
+.tool-log-wrapper .message-content {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+.tool-log-content {
+  width: 100%;
+}

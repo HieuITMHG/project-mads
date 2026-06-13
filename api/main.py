@@ -1,8 +1,14 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.routes import chat
 from api.routes import user
 from api.routes import doc
+from api.utils.logging_config import setup_logging, get_logger
+
+# Khởi tạo logging ngay khi module được load
+setup_logging()
+logger = get_logger(__name__)
 
 from core.postgres import engine
 from api.models.base import Base
@@ -51,7 +57,7 @@ async def lifespan(app: FastAPI):
     checkpointer = AsyncPostgresSaver(cp.agent_checkpointer_pool)
     await checkpointer.setup()
 
-    print("Đang lấy danh sách tool từ MCP server")
+    logger.info("Đang kết nối MCP server tại: %s", settings.mcp_server_url)
 
     mcp_stack = AsyncExitStack()
 
@@ -74,9 +80,11 @@ async def lifespan(app: FastAPI):
         await session.initialize()
 
         cp.dynamic_mcp_tools = await load_mcp_tools(session)
-        print(f"Đã lấy thành công {len(cp.dynamic_mcp_tools)} tools từ MCP!")
+        logger.info("Đã load thành công %d tools từ MCP server", len(cp.dynamic_mcp_tools))
+        for t in cp.dynamic_mcp_tools:
+            logger.debug("  → MCP tool: %s", t.name)
     except Exception as e:
-        print(f"Không kết nối được MCP Server: {e}")
+        logger.error("Không kết nối được MCP Server: %s", e, exc_info=True)
         await mcp_stack.aclose()
 
     graph = build_agent_graph()
@@ -86,22 +94,22 @@ async def lifespan(app: FastAPI):
         interrupt_before=["tools"]
     )
 
-    print("agent đã compile thành công")
+    logger.info("Agent graph đã compile thành công (interrupt_before=[tools])")
 
     yield
 
     if cp.agent_checkpointer_pool:
         await cp.agent_checkpointer_pool.close()
-        print("Đã đóng kết nối Checkpointer Pool an toàn.")
+        logger.info("Đã đóng kết nối Checkpointer Pool an toàn")
 
 app = FastAPI(title="MADS APP", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Cho phép tất cả các origin (bạn có thể thay đổi để bảo mật hơn)
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Cho phép tất cả HTTP methods (GET, POST, PUT, DELETE, v.v.)
-    allow_headers=["*"],  # Cho phép tất cả headers
+    allow_methods=["*"],  
+    allow_headers=["*"],  
 )
 
 app.include_router(chat.router)

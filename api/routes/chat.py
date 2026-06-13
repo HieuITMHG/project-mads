@@ -6,6 +6,7 @@ from typing import List
 import json
 from datetime import datetime, timezone, timedelta
 import httpx
+import time
 
 from core.postgres import get_db
 from api.models.chat_box import ChatBox
@@ -18,10 +19,13 @@ from api.deps import get_current_active_user
 from api.schemas.chat import ChatBoxResponse, MessageResponse, ApprovalRequest, ChatHistoryResponse
 from api.utils.chart_parser import extract_chart_metadata
 from api.repositories import message_repo, file_repo
+from api.utils.logging_config import get_logger
 
 import core.checkpointer as cp
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/chat", tags=["Chat"])
+
 
 @router.post("/", response_model=ChatBoxResponse)
 async def create_new_chat(db: AsyncSession = Depends(get_db), current_user = Depends(get_current_active_user)):
@@ -29,6 +33,7 @@ async def create_new_chat(db: AsyncSession = Depends(get_db), current_user = Dep
     db.add(new_chat)
     await db.commit()
     await db.refresh(new_chat)
+    logger.info("New chat created: id=%d user=%d", new_chat.id, current_user.id)
     return new_chat
 
 @router.get("/", response_model=List[ChatBoxResponse])
@@ -92,6 +97,7 @@ async def create_context(sessionfile_ids: list[int], db: AsyncSession, chatbox_i
                 files_to_update.append(session_file)
 
         if s3_paths_to_prepare:
+            logger.info("[Chat:%d] Preparing %d file(s) in sandbox...", chatbox_id, len(s3_paths_to_prepare))
             async with httpx.AsyncClient() as client:
                 try:
                     response = await client.post(
@@ -108,8 +114,9 @@ async def create_context(sessionfile_ids: list[int], db: AsyncSession, chatbox_i
                     for sf in files_to_update:
                         sf.sandbox_expires_at = new_expiry
                     await db.commit()
+                    logger.info("[Chat:%d] Sandbox file preparation succeeded.", chatbox_id)
                 except Exception as e:
-                    print(f"Error calling Sandbox API to prepare files: {e}")
+                    logger.error("[Chat:%d] Sandbox API prepare_file_data failed: %s", chatbox_id, e, exc_info=True)
                     raise HTTPException(status_code=500, detail="Unable to prepare data files")
                 
         file_context_str += "Information about the attached files in this session:\n"
@@ -139,6 +146,40 @@ async def create_context(sessionfile_ids: list[int], db: AsyncSession, chatbox_i
 
         return file_context_str
 
+
+def _now_iso() -> str:
+    """Return current UTC time as ISO string."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _truncate(text: str, max_len: int = 500) -> str:
+    """Truncate long strings for safe SSE transport."""
+    if not text:
+        return ""
+    text = str(text)
+    return text[:max_len] + "…" if len(text) > max_len else text
+
+
+def _extract_tool_output_text(tool_output) -> str:
+    """
+    Extract plain text from a tool output.
+    MCP tools return content as a list of dicts: [{'type': 'text', 'text': '...'}]
+    Regular tools return a plain string or other type.
+    """
+    if isinstance(tool_output, list):
+        parts = []
+        for item in tool_output:
+            if isinstance(item, dict):
+                parts.append(item.get("text", str(item)))
+            else:
+                parts.append(str(item))
+        return " ".join(parts)
+    # Handle LangChain ToolMessage objects
+    if hasattr(tool_output, "content"):
+        return _extract_tool_output_text(tool_output.content)
+    return str(tool_output) if tool_output is not None else ""
+
+
 @router.post("/{chatbox_id}/stream")
 async def chat_stream(
     chatbox_id: int, 
@@ -167,12 +208,18 @@ async def chat_stream(
         "file_context": file_context_str  
     }
 
+    logger.info("[Chat:%d] Stream started. User=%d | prompt_preview=%s",
+                chatbox_id, current_user.id, _truncate(prompt, 100))
+
     async def event_generator():
         full_ai_response = ""
         hitl_triggered = False
+        # Track active tool timers: tool_call_id -> start_time
+        tool_timers: dict[str, float] = {}
 
         try:
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Agent đang suy nghĩ...'})}\n\n"
+            yield f"data: {json.dumps({'type': 'status', 'content': 'Agent đang suy nghĩ...', 'timestamp': _now_iso()})}\n\n"
+
             async for event in cp.agent_app.astream_events(input_state, config=config, version="v2"):
                 kind = event["event"]
                 
@@ -183,16 +230,57 @@ async def chat_stream(
                         yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
                 
                 elif kind == "on_tool_start":
-                    tool_name = event["name"]
-                    yield f"data: {json.dumps({'type': 'status', 'content': f'Đang chạy công cụ: {tool_name}...'})}\n\n"
+                    tool_name = event.get("name", "unknown_tool")
+                    run_id = event.get("run_id", tool_name)
+                    tool_input = event.get("data", {}).get("input", {})
+                    tool_timers[run_id] = time.perf_counter()
+
+                    logger.info("[Chat:%d] Tool START → %s | args=%s", chatbox_id, tool_name, _truncate(str(tool_input), 200))
+
+                    yield f"data: {json.dumps({
+                        'type': 'tool_start',
+                        'run_id': run_id,
+                        'tool_name': tool_name,
+                        'args': tool_input,
+                        'timestamp': _now_iso()
+                    })}\n\n"
+
+                elif kind == "on_tool_end":
+                    tool_name = event.get("name", "unknown_tool")
+                    run_id = event.get("run_id", tool_name)
+                    tool_output = event.get("data", {}).get("output", "")
+                    
+                    duration_ms = 0
+                    if run_id in tool_timers:
+                        duration_ms = int((time.perf_counter() - tool_timers.pop(run_id)) * 1000)
+
+                    output_preview = _truncate(_extract_tool_output_text(tool_output), 400)
+                    is_error = any(kw in output_preview.lower() for kw in ("error", "exception", "traceback", "failed"))
+
+                    logger.info("[Chat:%d] Tool END ← %s | duration=%dms | is_error=%s | preview=%s",
+                                chatbox_id, tool_name, duration_ms, is_error, _truncate(output_preview, 100))
+
+                    yield f"data: {json.dumps({
+                        'type': 'tool_end',
+                        'run_id': run_id,
+                        'tool_name': tool_name,
+                        'output_preview': output_preview,
+                        'duration_ms': duration_ms,
+                        'is_error': is_error,
+                        'timestamp': _now_iso()
+                    })}\n\n"
 
             current_state = await cp.agent_app.aget_state(config)
             if current_state.next and "tools" in current_state.next:
                 hitl_triggered = True
                 pending_tools = current_state.values["messages"][-1].tool_calls
-                yield f"data: {json.dumps({'type': 'hitl_approval_required', 'tool_calls': pending_tools})}\n\n"
+                logger.info("[Chat:%d] HITL triggered. Waiting for user approval on tools: %s",
+                            chatbox_id, [tc["name"] for tc in pending_tools])
+                yield f"data: {json.dumps({'type': 'hitl_approval_required', 'tool_calls': pending_tools, 'timestamp': _now_iso()})}\n\n"
 
             yield "data: [DONE]\n\n"
+            logger.info("[Chat:%d] Stream completed. hitl=%s | response_len=%d",
+                        chatbox_id, hitl_triggered, len(full_ai_response))
             
             if not hitl_triggered and full_ai_response.strip():
                 clean_content, chart_meta = extract_chart_metadata(full_ai_response)
@@ -206,8 +294,8 @@ async def chat_stream(
                 await db.commit()
 
         except Exception as e:
-            print(f"Lỗi Stream: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+            logger.error("[Chat:%d] Stream error: %s", chatbox_id, e, exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e), 'timestamp': _now_iso()})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -225,16 +313,20 @@ async def approve_tool_call(
 
     config = {"configurable": {"thread_id": str(chatbox_id)}}
     current_state = await cp.agent_app.aget_state(config)
+
+    logger.info("[Chat:%d] HITL action=%s from user=%d", chatbox_id, req.action, current_user.id)
     
     if req.action == "edit":
         last_message = current_state.values["messages"][-1]
         last_message.tool_calls[0]["args"] = req.edited_args
         await cp.agent_app.aupdate_state(config, {"messages": [last_message]})
+        logger.info("[Chat:%d] Tool args edited: %s", chatbox_id, _truncate(str(req.edited_args), 200))
         
     elif req.action == "reject":
         last_message = current_state.values["messages"][-1]
         tool_call_id = last_message.tool_calls[0]["id"]
         tool_name = last_message.tool_calls[0]["name"]
+        logger.info("[Chat:%d] Tool rejected: %s (id=%s)", chatbox_id, tool_name, tool_call_id)
         
         reject_message = ToolMessage(
             tool_call_id=tool_call_id,
@@ -245,15 +337,56 @@ async def approve_tool_call(
 
     async def resume_event_generator():
         full_ai_response = ""
-        hitl_triggered = False 
+        hitl_triggered = False
+        tool_timers: dict[str, float] = {}
 
         try:
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Đang tiếp tục suy nghĩ...'})}\n\n"
+            yield f"data: {json.dumps({'type': 'status', 'content': 'Đang tiếp tục suy nghĩ...', 'timestamp': _now_iso()})}\n\n"
+
             async for event in cp.agent_app.astream_events(None, config=config, version="v2"):
                 kind = event["event"]
                 
                 if kind == "on_tool_start":
-                    yield f"data: {json.dumps({'type': 'status', 'content': 'Đang thực thi công cụ...'})}\n\n"
+                    tool_name = event.get("name", "unknown_tool")
+                    run_id = event.get("run_id", tool_name)
+                    tool_input = event.get("data", {}).get("input", {})
+                    tool_timers[run_id] = time.perf_counter()
+
+                    logger.info("[Chat:%d] Tool START (resume) → %s | args=%s",
+                                chatbox_id, tool_name, _truncate(str(tool_input), 200))
+
+                    yield f"data: {json.dumps({
+                        'type': 'tool_start',
+                        'run_id': run_id,
+                        'tool_name': tool_name,
+                        'args': tool_input,
+                        'timestamp': _now_iso()
+                    })}\n\n"
+
+                elif kind == "on_tool_end":
+                    tool_name = event.get("name", "unknown_tool")
+                    run_id = event.get("run_id", tool_name)
+                    tool_output = event.get("data", {}).get("output", "")
+
+                    duration_ms = 0
+                    if run_id in tool_timers:
+                        duration_ms = int((time.perf_counter() - tool_timers.pop(run_id)) * 1000)
+
+                    output_preview = _truncate(_extract_tool_output_text(tool_output), 400)
+                    is_error = any(kw in output_preview.lower() for kw in ("error", "exception", "traceback", "failed"))
+
+                    logger.info("[Chat:%d] Tool END (resume) ← %s | duration=%dms | is_error=%s",
+                                chatbox_id, tool_name, duration_ms, is_error)
+
+                    yield f"data: {json.dumps({
+                        'type': 'tool_end',
+                        'run_id': run_id,
+                        'tool_name': tool_name,
+                        'output_preview': output_preview,
+                        'duration_ms': duration_ms,
+                        'is_error': is_error,
+                        'timestamp': _now_iso()
+                    })}\n\n"
                     
                 elif kind == "on_chat_model_stream":
                     content = event["data"]["chunk"].content
@@ -265,9 +398,13 @@ async def approve_tool_call(
             if current_state.next and "tools" in current_state.next:
                 hitl_triggered = True
                 pending_tools = current_state.values["messages"][-1].tool_calls
-                yield f"data: {json.dumps({'type': 'hitl_approval_required', 'tool_calls': pending_tools})}\n\n"
+                logger.info("[Chat:%d] HITL triggered again after resume. tools=%s",
+                            chatbox_id, [tc["name"] for tc in pending_tools])
+                yield f"data: {json.dumps({'type': 'hitl_approval_required', 'tool_calls': pending_tools, 'timestamp': _now_iso()})}\n\n"
 
             yield "data: [DONE]\n\n"
+            logger.info("[Chat:%d] Resume stream completed. hitl=%s | response_len=%d",
+                        chatbox_id, hitl_triggered, len(full_ai_response))
             
             if not hitl_triggered and full_ai_response.strip():
                 clean_content, chart_meta = extract_chart_metadata(full_ai_response)
@@ -281,7 +418,7 @@ async def approve_tool_call(
                 await db.commit()
                 
         except Exception as e:
-            print(f"Lỗi Resume Stream: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+            logger.error("[Chat:%d] Resume stream error: %s", chatbox_id, e, exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e), 'timestamp': _now_iso()})}\n\n"
 
     return StreamingResponse(resume_event_generator(), media_type="text/event-stream")

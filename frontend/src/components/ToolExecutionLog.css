@@ -1,0 +1,232 @@
+/* =============================
+   Tool Execution Log Panel
+   ============================= */
+
+.tool-log-panel {
+  margin: 0.75rem 0;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 20, 35, 0.6);
+  backdrop-filter: blur(10px);
+  overflow: hidden;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+}
+
+/* Panel header button */
+.tool-log-panel-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.9rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted, #9ca3af);
+  transition: background 0.2s ease;
+}
+
+.tool-log-panel-header:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.tool-log-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  color: var(--text-secondary, #d1d5db);
+}
+
+.tool-log-count {
+  background: rgba(100, 116, 139, 0.3);
+  color: #94a3b8;
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tool-log-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tool-log-badge.running {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.tool-log-badge.error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+/* Panel body */
+.tool-log-body {
+  padding: 0.4rem 0.5rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.tool-log-body::-webkit-scrollbar { width: 4px; }
+.tool-log-body::-webkit-scrollbar-track { background: transparent; }
+.tool-log-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+
+/* =============================
+   Tool Entry Card
+   ============================= */
+
+.tool-entry {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.tool-entry--running {
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.tool-entry--done {
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.tool-entry--error {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Entry header row */
+.tool-entry-header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tool-entry-header:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+.tool-entry-name {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12.5px;
+  color: #e2e8f0;
+  font-weight: 600;
+  flex: 1;
+}
+
+.tool-entry-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.tool-entry-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.tool-entry-badge.running {
+  background: rgba(59, 130, 246, 0.12);
+  color: #93c5fd;
+}
+
+.tool-entry-badge.duration {
+  background: rgba(100, 116, 139, 0.15);
+  color: #94a3b8;
+}
+
+.tool-entry-badge.error {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+}
+
+.tool-entry-expand-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+
+.tool-entry-expand-btn:hover { color: #94a3b8; }
+
+/* Status icons */
+.tool-log-icon { flex-shrink: 0; }
+.tool-log-icon.running { color: #60a5fa; }
+.tool-log-icon.done    { color: #4ade80; }
+.tool-log-icon.error   { color: #f87171; }
+
+/* Expanded body */
+.tool-entry-body {
+  padding: 0 0.6rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.tool-entry-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.tool-entry-section-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  font-weight: 700;
+  padding-top: 0.35rem;
+}
+
+.tool-entry-pre {
+  background: rgba(0,0,0,0.3);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  color: #cbd5e1;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.tool-entry-pre--output {
+  color: #a3e635;
+  background: rgba(0,0,0,0.4);
+}
+
+.tool-entry-timestamp {
+  font-size: 10px;
+  color: #475569;
+  text-align: right;
+  padding-top: 0.2rem;
+}

@@ -42,6 +42,13 @@ def extract_valid_json(text: str) -> str:
                 elif char == ']': 
                     open_tokens -= 1
                     if open_tokens == 0: return text[start_idx:i+1]
+                    
+    if open_tokens > 0:
+        if is_object:
+            return text[start_idx:] + ('}' * open_tokens)
+        else:
+            return text[start_idx:] + (']' * open_tokens)
+            
     return text
 
 def extract_chart_metadata(content: str) -> tuple[str, dict | None]:

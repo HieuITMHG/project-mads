@@ -7,3 +7,4 @@ class AgentState(TypedDict):
     chatbox_id: int
     sessionfile_ids: list[int]
     file_context: str
+    summary: str

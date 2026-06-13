@@ -75,8 +75,34 @@ async def execute_code(request: CodeRequest):
     os.chmod(session_dir, 0o777)
 
     script_path = os.path.join(session_dir, "script.py")
+    
+    # Mã mồi (Boilerplate) tự động nạp dữ liệu
+    boilerplate = """
+import pandas as pd
+import glob
+import os
+
+try:
+    import plotly.io as pio
+    pio.templates.default = "none"
+except ImportError:
+    pass
+
+dfs = {}
+for file in glob.glob("*.*"):
+    if file.endswith('.csv'):
+        dfs[file] = pd.read_csv(file)
+    elif file.endswith(('.xls', '.xlsx')):
+        dfs[file] = pd.read_excel(file)
+
+if len(dfs) == 1:
+    df = list(dfs.values())[0]
+
+# --- USER CODE START ---
+"""
+    
     with open(script_path, "w") as f:
-        f.write(request.code)
+        f.write(boilerplate + request.code)
 
     try:
         container = client.containers.run(

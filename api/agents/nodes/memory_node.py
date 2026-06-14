@@ -34,9 +34,28 @@ async def manage_memory_node(state: dict, config: RunnableConfig):
         logger.debug("[Thread:%s] Resetting collected_results from previous turn.", thread_id)
         updates["collected_results"] = ["CLEAR"]
         
-    # 2. Xử lý logic cắt giảm messages
+    delete_actions = []
     messages = state.get("messages", [])
+    
+    # Lọc bỏ các tin nhắn nội bộ (tool calls, tool results) của các lượt hỏi TRƯỚC.
+    if messages:
+        last_human_idx = -1
+        for i in range(len(messages) - 1, -1, -1):
+            if isinstance(messages[i], HumanMessage):
+                last_human_idx = i
+                break
+                
+        if last_human_idx > 0:
+            for i in range(last_human_idx):
+                msg = messages[i]
+                if isinstance(msg, ToolMessage) or (isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None)):
+                    if msg.id:
+                        delete_actions.append(RemoveMessage(id=msg.id))
+                        
+    # 2. Xử lý logic cắt giảm messages
     if len(messages) <= 10:
+        if delete_actions:
+            updates["messages"] = delete_actions
         return updates
 
     # Giữ lại tin nhắn đầu (0) và 6 tin nhắn cuối
@@ -57,6 +76,7 @@ async def manage_memory_node(state: dict, config: RunnableConfig):
 
     summary_prompt = f"""Summarize the following part of the conversation. 
     Focus on what the user has asked so far, what actions the assistant has taken, and what the outcomes were.
+    CRITICAL: You MUST preserve any important metadata, numerical figures, statistics, and specific data points (e.g., "56,164 reviews", "Top 1: Sao Paulo"). Do NOT generalize quantitative results, keep the exact numbers so they can be referenced later without recalculating.
     Do NOT include details of errors if they were already resolved.
     """
     if current_summary:
@@ -73,11 +93,14 @@ async def manage_memory_node(state: dict, config: RunnableConfig):
     summary_response = await llm.ainvoke([SystemMessage(content=summary_prompt)])
     new_summary = summary_response.content
 
-    delete_actions = [RemoveMessage(id=m.id) for m in old_messages if m.id]
+    prune_delete_actions = [RemoveMessage(id=m.id) for m in old_messages if m.id]
+    
+    # Merge the two lists
+    all_delete_actions = delete_actions + prune_delete_actions
 
-    logger.info("[Thread:%s] Memory Pruning complete. Deleted %d messages. New summary created.", thread_id, len(delete_actions))
+    logger.info("[Thread:%s] Memory Pruning complete. Deleted %d messages. New summary created.", thread_id, len(all_delete_actions))
     
     updates["summary"] = new_summary
-    updates["messages"] = delete_actions
+    updates["messages"] = all_delete_actions
     
     return updates

@@ -1,7 +1,7 @@
 from typing import TypedDict, Sequence, Annotated
 from langgraph.graph import add_messages, StateGraph, START, END
 from langgraph.prebuilt import ToolNode
-from langchain_core.messages import ToolMessage, BaseMessage, SystemMessage
+from langchain_core.messages import ToolMessage, BaseMessage, SystemMessage, AIMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 import os
@@ -27,7 +27,7 @@ def get_analyst_prompt() -> str:
 
 def get_analyst_tools():
     # Chỉ lấy tool liên quan đến code/pandas (run_python) từ MCP
-    return [t for t in cp.dynamic_mcp_tools if t.name == "run_python"]
+    return [t for t in cp.dynamic_mcp_tools if t.name == "run_data_analysis"]
 
 # --- 3. Agent Logic ---
 async def analyst_agent(state: AnalystState):
@@ -64,20 +64,39 @@ def should_continue(state: AnalystState):
     messages = state["messages"]
     last_message = messages[-1]
     if getattr(last_message, "tool_calls", None):
+        tool_calls_count = sum(1 for m in messages if isinstance(m, AIMessage) and getattr(m, "tool_calls", None))
+        if tool_calls_count >= 3:
+            logger.warning("[Analyst Agent] Vượt quá giới hạn 3 lần thử. Chuyển sang fallback.")
+            return "fallback"
         return "tools"
     return END
+
+def fallback_node(state: AnalystState):
+    """Node dự phòng khi vượt quá số lần thử tối đa."""
+    return {"messages": [AIMessage(content="Tôi đã thử thực thi code Python 3 lần nhưng vẫn gặp lỗi và không thể giải quyết được yêu cầu này. Vui lòng cung cấp thêm thông tin hoặc kiểm tra lại yêu cầu.")]}
 
 # --- 4. Sub-Graph Compilation ---
 builder = StateGraph(AnalystState)
 builder.add_node("analyst_agent", analyst_agent)
 
-tools = get_analyst_tools()
-tool_node = ToolNode(tools)
-builder.add_node("tools", tool_node)
+# Node thực thi tool - load tools at RUNTIME, not at import time
+async def tool_executor_node(state: AnalystState):
+    """Runtime ToolNode: load tools dynamically khi graph thực sự chạy."""
+    tools = get_analyst_tools()
+    if not tools:
+        logger.error("[Analyst Agent] Không tìm thấy Analyst tools trong cp.dynamic_mcp_tools!")
+        return {"messages": [ToolMessage(content="Lỗi hệ thống: Analyst tool chưa được load. Vui lòng thử lại sau.", tool_call_id="error", name="run_data_analysis")]}
+    node = ToolNode(tools)
+    return await node.ainvoke(state)
+
+builder.add_node("tools", tool_executor_node)
+
+builder.add_node("fallback", fallback_node)
 
 builder.add_edge(START, "analyst_agent")
 builder.add_conditional_edges("analyst_agent", should_continue)
 builder.add_edge("tools", "analyst_agent")
+builder.add_edge("fallback", END)
 
 analyst_graph = builder.compile()
 
@@ -108,6 +127,6 @@ async def AnalystWrapper(state: SupervisorState, config: RunnableConfig):
     
     # Ném về Supervisor
     return {
-        "messages": [ToolMessage(content=f"Analyst Agent completed. Output:\n{last_msg}", tool_call_id=tool_call_id, name=tool_name)],
+        "messages": [ToolMessage(content="Thực thi hoàn tất. Kết quả đã được lưu vào collected_results.", tool_call_id=tool_call_id, name=tool_name)],
         "collected_results": [f"--- Analyst Agent Output ---\nInstruction: {instruction}\nResult: {last_msg}\n------------------------"]
     }

@@ -412,7 +412,7 @@ const ChatArea = ({ chatboxId }) => {
           <div className="message-wrapper assistant tool-log-wrapper">
             <div className="message-avatar"><Bot size={20} /></div>
             <div className="message-content tool-log-content">
-              <ToolExecutionLog entries={toolLog} />
+              <ToolExecutionLog entries={toolLog} isStreaming={isStreaming} />
             </div>
           </div>
         )}

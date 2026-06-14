@@ -101,7 +101,13 @@ async def lifespan(app: FastAPI):
         await cp.agent_checkpointer_pool.close()
         logger.info("Đã đóng kết nối Checkpointer Pool an toàn")
 
+from api.utils.limiter import limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
+
 app = FastAPI(title="MADS APP", lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,

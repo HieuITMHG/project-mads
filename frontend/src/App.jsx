@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './components/Login';
+import Register from './components/Register';
 import ChatLayout from './components/ChatLayout';
 
 const ProtectedRoute = ({ children }) => {
@@ -16,6 +17,7 @@ const AppRoutes = () => {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
       <Route 
         path="/*" 
         element={

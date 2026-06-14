@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.responses import StreamingResponse
 from sqlalchemy.future import select
@@ -22,6 +22,7 @@ from api.repositories import message_repo, file_repo
 from api.utils.logging_config import get_logger
 
 import core.checkpointer as cp
+from api.utils.limiter import limiter
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/chat", tags=["Chat"])
@@ -143,7 +144,7 @@ async def create_context(sessionfile_ids: list[int], db: AsyncSession, chatbox_i
         else:
             expanded_ids = []
 
-        return file_context_str, expanded_ids
+    return file_context_str, expanded_ids if 'expanded_ids' in locals() else []
 
 
 def _now_iso() -> str:
@@ -180,7 +181,9 @@ def _extract_tool_output_text(tool_output) -> str:
 
 
 @router.post("/{chatbox_id}/stream")
+@limiter.limit("3/day")
 async def chat_stream(
+    request: Request,
     chatbox_id: int, 
     prompt: str, 
     sessionfile_ids: list[int],
@@ -188,8 +191,22 @@ async def chat_stream(
     current_user = Depends(get_current_active_user)
 ):
     chat_req = await db.execute(select(ChatBox).filter(ChatBox.id == chatbox_id, ChatBox.user_id == current_user.id))
-    if not chat_req.scalar_one_or_none():
+    chatbox = chat_req.scalar_one_or_none()
+    if not chatbox:
         raise HTTPException(status_code=404, detail="Không tìm thấy cuộc trò chuyện")
+
+    if chatbox.title == "Cuộc trò chuyện mới":
+        from langchain_openai import ChatOpenAI
+        from langchain_core.messages import HumanMessage
+        try:
+            llm_title = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
+            res = await llm_title.ainvoke([
+                HumanMessage(content=f"Tạo một tiêu đề cực kỳ ngắn gọn (tối đa 5 từ) tóm tắt yêu cầu sau của người dùng, viết bằng tiếng Việt, KHÔNG có dấu ngoặc kép, KHÔNG cần giải thích:\n\n{prompt}")
+            ])
+            chatbox.title = res.content.strip().strip('"')
+            await db.commit()
+        except Exception as e:
+            logger.warning("Lỗi khi tạo title cho chatbox: %s", e)
 
     await message_repo.create_message(db=db, chatbox_id=chatbox_id, role="user", content=prompt)
 
@@ -284,4 +301,4 @@ async def chat_stream(
             yield f"data: {json.dumps({'type': 'error', 'content': str(e), 'timestamp': _now_iso()})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
-
+

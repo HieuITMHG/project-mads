@@ -56,8 +56,11 @@ async def Supervisor(state: SupervisorState):
     
     sys_prompt = get_supervisor_prompt()
     results_str = "\n\n".join(state.get("collected_results", []))
+    summary_str = state.get("summary", "")
     
     context_msg = f"Collected Results so far:\n{results_str if results_str else 'None'}"
+    if summary_str:
+        context_msg += f"\n\n--- PREVIOUS CONVERSATION SUMMARY ---\n{summary_str}\n(Note: Use this summary only if the user refers to past context)"
     
     # Vòng lặp nội bộ để xử lý công cụ RAG trực tiếp trong Supervisor mà không cần rời khỏi node
     messages = [

@@ -76,8 +76,16 @@ const ToolEntry = ({ entry }) => {
  * Props:
  *   entries: Array<{ id, run_id, tool_name, status, args, output_preview, duration_ms, timestamp }>
  */
-const ToolExecutionLog = ({ entries = [] }) => {
+const ToolExecutionLog = ({ entries = [], isStreaming = false }) => {
   const [panelOpen, setPanelOpen] = useState(true);
+
+  React.useEffect(() => {
+    if (!isStreaming) {
+      setPanelOpen(false);
+    } else {
+      setPanelOpen(true);
+    }
+  }, [isStreaming]);
 
   if (entries.length === 0) return null;
 

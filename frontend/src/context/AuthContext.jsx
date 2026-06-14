@@ -37,6 +37,21 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const register = async (username, password) => {
+    setLoading(true);
+    try {
+      await api.post('/register', { username, password });
+      return { success: true };
+    } catch (error) {
+      return { 
+        success: false, 
+        message: error.response?.data?.detail || 'Registration failed'
+      };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = async () => {
     try {
       if (token) {
@@ -51,7 +66,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout, loading }}>
+    <AuthContext.Provider value={{ isAuthenticated, login, logout, register, loading }}>
       {children}
     </AuthContext.Provider>
   );

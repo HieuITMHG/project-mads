@@ -78,9 +78,11 @@ async def create_context(sessionfile_ids: list[int], db: AsyncSession, chatbox_i
         session_files_data = files_req.all()
         s3_paths_to_prepare = []
         files_to_update = []
+        physic_file_ids = []
         now = datetime.now(timezone.utc)
 
         for session_file, physic_file in session_files_data:
+            physic_file_ids.append(physic_file.id)
             if session_file.sandbox_expires_at is None or \
                (session_file.sandbox_expires_at - now).total_seconds() < 300:
                 s3_paths_to_prepare.append(physic_file.s3_path)
@@ -134,7 +136,14 @@ async def create_context(sessionfile_ids: list[int], db: AsyncSession, chatbox_i
                 -------------------
                 """
 
-        return file_context_str
+        # Trích xuất tất cả sessionfile_ids có cùng physic_file_ids (để RAG tìm được file upload trùng)
+        if physic_file_ids:
+            all_sfs_req = await db.execute(select(SessionFile.id).filter(SessionFile.physic_file_id.in_(physic_file_ids)))
+            expanded_ids = all_sfs_req.scalars().all()
+        else:
+            expanded_ids = []
+
+        return file_context_str, expanded_ids
 
 
 def _now_iso() -> str:
@@ -184,12 +193,12 @@ async def chat_stream(
 
     await message_repo.create_message(db=db, chatbox_id=chatbox_id, role="user", content=prompt)
 
-    file_context_str = await create_context(sessionfile_ids=sessionfile_ids, chatbox_id=chatbox_id, db=db)
+    file_context_str, expanded_sessionfile_ids = await create_context(sessionfile_ids=sessionfile_ids, chatbox_id=chatbox_id, db=db)
 
     config = {"configurable": {"thread_id": str(chatbox_id)}}
     input_state = {
         "messages": [("user", prompt)],
-        "sessionfile_ids": sessionfile_ids,
+        "sessionfile_ids": expanded_sessionfile_ids if expanded_sessionfile_ids else sessionfile_ids,
         "file_context": file_context_str  
     }
 

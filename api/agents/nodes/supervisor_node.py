@@ -117,8 +117,14 @@ async def Supervisor(state: SupervisorState):
         elif tool_name == "search_rag":
             # Chạy RAG cục bộ và tiếp tục vòng lặp LLM
             logger.info("-> [Supervisor] Đang tìm kiếm RAG: %s", tool_args)
-            # search_rag là 1 function tool của langchain, gọi invoke
-            rag_result = search_rag.invoke(tool_args)
+            
+            # Vì gọi thủ công qua .invoke() thay vì dùng ToolNode của LangGraph, ta phải tự inject state vào
+            current_session_ids = state.get("sessionfile_ids", [])
+            logger.info("-> [Supervisor] RAG session_ids từ State: %s", current_session_ids)
+            invoke_args = {**tool_args, "sessionfile_ids": current_session_ids}
+            rag_result = search_rag.invoke(invoke_args)
+
+            logger.info("RAG result: %s", str(rag_result))
             
             tool_msg = ToolMessage(content=str(rag_result), tool_call_id=tool_call["id"], name=tool_name)
             

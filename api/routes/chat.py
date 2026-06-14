@@ -61,22 +61,12 @@ async def get_chat_history(
     files_req = await db.execute(
         select(SessionFile).filter(SessionFile.chatbox_id == chatbox_id).order_by(SessionFile.created_at.desc())
     )
-
-    config = {"configurable": {"thread_id": str(chatbox_id)}}
-    current_state = await cp.agent_app.aget_state(config)
-    pending_tools = None
-    if current_state and current_state.next and "tools" in current_state.next:
-        try:
-            pending_tools = current_state.values["messages"][-1].tool_calls
-        except (KeyError, IndexError, AttributeError):
-            pass
-
     return {
         "chatbox_id": chat.id,
         "title": chat.title,
         "messages": msgs_req.scalars().all(),
         "session_files": files_req.scalars().all(),
-        "pending_tools": pending_tools
+        "pending_tools": None
     }
 
 async def create_context(sessionfile_ids: list[int], db: AsyncSession, chatbox_id: int):
@@ -192,11 +182,6 @@ async def chat_stream(
     if not chat_req.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Không tìm thấy cuộc trò chuyện")
 
-    config = {"configurable": {"thread_id": str(chatbox_id)}}
-    current_state = await cp.agent_app.aget_state(config)
-    if current_state and current_state.next and "tools" in current_state.next:
-        raise HTTPException(status_code=400, detail="Bạn đang có yêu cầu phê duyệt công cụ (Human-in-the-loop) chưa hoàn thành. Hãy tải lại trang và phê duyệt/từ chối trước khi tiếp tục.")
-
     await message_repo.create_message(db=db, chatbox_id=chatbox_id, role="user", content=prompt)
 
     file_context_str = await create_context(sessionfile_ids=sessionfile_ids, chatbox_id=chatbox_id, db=db)
@@ -270,19 +255,11 @@ async def chat_stream(
                         'timestamp': _now_iso()
                     })}\n\n"
 
-            current_state = await cp.agent_app.aget_state(config)
-            if current_state.next and "tools" in current_state.next:
-                hitl_triggered = True
-                pending_tools = current_state.values["messages"][-1].tool_calls
-                logger.info("[Chat:%d] HITL triggered. Waiting for user approval on tools: %s",
-                            chatbox_id, [tc["name"] for tc in pending_tools])
-                yield f"data: {json.dumps({'type': 'hitl_approval_required', 'tool_calls': pending_tools, 'timestamp': _now_iso()})}\n\n"
-
             yield "data: [DONE]\n\n"
-            logger.info("[Chat:%d] Stream completed. hitl=%s | response_len=%d",
-                        chatbox_id, hitl_triggered, len(full_ai_response))
+            logger.info("[Chat:%d] Stream completed. response_len=%d",
+                        chatbox_id, len(full_ai_response))
             
-            if not hitl_triggered and full_ai_response.strip():
+            if full_ai_response.strip():
                 clean_content, chart_meta = extract_chart_metadata(full_ai_response)
                 new_ai_msg = Message(
                     chatbox_id=chatbox_id, 
@@ -298,127 +275,4 @@ async def chat_stream(
             yield f"data: {json.dumps({'type': 'error', 'content': str(e), 'timestamp': _now_iso()})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-
-@router.post("/{chatbox_id}/approve")
-async def approve_tool_call(
-    chatbox_id: int, 
-    req: ApprovalRequest,
-    db: AsyncSession = Depends(get_db), 
-    current_user = Depends(get_current_active_user)
-):
-    chat_req = await db.execute(select(ChatBox).filter(ChatBox.id == chatbox_id, ChatBox.user_id == current_user.id))
-    if not chat_req.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Không tìm thấy cuộc trò chuyện")
-
-    config = {"configurable": {"thread_id": str(chatbox_id)}}
-    current_state = await cp.agent_app.aget_state(config)
-
-    logger.info("[Chat:%d] HITL action=%s from user=%d", chatbox_id, req.action, current_user.id)
-    
-    if req.action == "edit":
-        last_message = current_state.values["messages"][-1]
-        last_message.tool_calls[0]["args"] = req.edited_args
-        await cp.agent_app.aupdate_state(config, {"messages": [last_message]})
-        logger.info("[Chat:%d] Tool args edited: %s", chatbox_id, _truncate(str(req.edited_args), 200))
-        
-    elif req.action == "reject":
-        last_message = current_state.values["messages"][-1]
-        tool_call_id = last_message.tool_calls[0]["id"]
-        tool_name = last_message.tool_calls[0]["name"]
-        logger.info("[Chat:%d] Tool rejected: %s (id=%s)", chatbox_id, tool_name, tool_call_id)
-        
-        reject_message = ToolMessage(
-            tool_call_id=tool_call_id,
-            name=tool_name,
-            content="LỖI: Người dùng đã từ chối thực thi lệnh này. Hãy xin lỗi hoặc đề xuất phương án phân tích khác."
-        )
-        await cp.agent_app.aupdate_state(config, {"messages": [reject_message]}, as_node="tools")
-
-    async def resume_event_generator():
-        full_ai_response = ""
-        hitl_triggered = False
-        tool_timers: dict[str, float] = {}
-
-        try:
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Đang tiếp tục suy nghĩ...', 'timestamp': _now_iso()})}\n\n"
-
-            async for event in cp.agent_app.astream_events(None, config=config, version="v2"):
-                kind = event["event"]
-                
-                if kind == "on_tool_start":
-                    tool_name = event.get("name", "unknown_tool")
-                    run_id = event.get("run_id", tool_name)
-                    tool_input = event.get("data", {}).get("input", {})
-                    tool_timers[run_id] = time.perf_counter()
-
-                    logger.info("[Chat:%d] Tool START (resume) → %s | args=%s",
-                                chatbox_id, tool_name, _truncate(str(tool_input), 200))
-
-                    yield f"data: {json.dumps({
-                        'type': 'tool_start',
-                        'run_id': run_id,
-                        'tool_name': tool_name,
-                        'args': tool_input,
-                        'timestamp': _now_iso()
-                    })}\n\n"
-
-                elif kind == "on_tool_end":
-                    tool_name = event.get("name", "unknown_tool")
-                    run_id = event.get("run_id", tool_name)
-                    tool_output = event.get("data", {}).get("output", "")
-
-                    duration_ms = 0
-                    if run_id in tool_timers:
-                        duration_ms = int((time.perf_counter() - tool_timers.pop(run_id)) * 1000)
-
-                    output_preview = _truncate(_extract_tool_output_text(tool_output), 400)
-                    is_error = any(kw in output_preview.lower() for kw in ("error", "exception", "traceback", "failed"))
-
-                    logger.info("[Chat:%d] Tool END (resume) ← %s | duration=%dms | is_error=%s",
-                                chatbox_id, tool_name, duration_ms, is_error)
-
-                    yield f"data: {json.dumps({
-                        'type': 'tool_end',
-                        'run_id': run_id,
-                        'tool_name': tool_name,
-                        'output_preview': output_preview,
-                        'duration_ms': duration_ms,
-                        'is_error': is_error,
-                        'timestamp': _now_iso()
-                    })}\n\n"
-                    
-                elif kind == "on_chat_model_stream":
-                    content = event["data"]["chunk"].content
-                    if content:
-                        full_ai_response += content
-                        yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
-            
-            current_state = await cp.agent_app.aget_state(config)
-            if current_state.next and "tools" in current_state.next:
-                hitl_triggered = True
-                pending_tools = current_state.values["messages"][-1].tool_calls
-                logger.info("[Chat:%d] HITL triggered again after resume. tools=%s",
-                            chatbox_id, [tc["name"] for tc in pending_tools])
-                yield f"data: {json.dumps({'type': 'hitl_approval_required', 'tool_calls': pending_tools, 'timestamp': _now_iso()})}\n\n"
-
-            yield "data: [DONE]\n\n"
-            logger.info("[Chat:%d] Resume stream completed. hitl=%s | response_len=%d",
-                        chatbox_id, hitl_triggered, len(full_ai_response))
-            
-            if not hitl_triggered and full_ai_response.strip():
-                clean_content, chart_meta = extract_chart_metadata(full_ai_response)
-                new_ai_msg = Message(
-                    chatbox_id=chatbox_id, 
-                    role="assistant", 
-                    content=clean_content,
-                    metadata_data=chart_meta
-                )
-                db.add(new_ai_msg)
-                await db.commit()
-                
-        except Exception as e:
-            logger.error("[Chat:%d] Resume stream error: %s", chatbox_id, e, exc_info=True)
-            yield f"data: {json.dumps({'type': 'error', 'content': str(e), 'timestamp': _now_iso()})}\n\n"
-
-    return StreamingResponse(resume_event_generator(), media_type="text/event-stream")
+

@@ -90,11 +90,10 @@ async def lifespan(app: FastAPI):
     graph = build_agent_graph()
 
     cp.agent_app = graph.compile(
-        checkpointer=checkpointer,
-        interrupt_before=["tools"]
+        checkpointer=checkpointer
     )
 
-    logger.info("Agent graph đã compile thành công (interrupt_before=[tools])")
+    logger.info("Agent graph đã compile thành công")
 
     yield
 

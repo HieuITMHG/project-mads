@@ -3,7 +3,6 @@ import ReactMarkdown from 'react-markdown';
 import { Send, Bot, User, Loader2, BrainCircuit, Wrench, CheckCheck, AlertCircle } from 'lucide-react';
 import api from '../api/client';
 import FileUpload from './FileUpload';
-import HITLApproval from './HITLApproval';
 import ChartViewer from './ChartViewer';
 import ToolExecutionLog from './ToolExecutionLog';
 import './ChatArea.css';
@@ -162,7 +161,6 @@ const ChatArea = ({ chatboxId }) => {
   const [isStreaming, setIsStreaming]           = useState(false);
   const [currentStreamText, setCurrentStreamText] = useState('');
   const [streamStatus, setStreamStatus]         = useState('');
-  const [pendingHITL, setPendingHITL]           = useState(null);
 
   // Step progress
   const [currentStep, setCurrentStep]   = useState('thinking');
@@ -176,7 +174,7 @@ const ChatArea = ({ chatboxId }) => {
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  useEffect(() => { scrollToBottom(); }, [messages, currentStreamText, streamStatus, pendingHITL, toolLog]);
+  useEffect(() => { scrollToBottom(); }, [messages, currentStreamText, streamStatus, toolLog]);
 
   // ---------------------------------------------------------------------------
   // Elapsed timer helpers
@@ -221,12 +219,6 @@ const ChatArea = ({ chatboxId }) => {
       setSessionFiles(files);
       setSelectedFileIds(files.map(f => f.id));
 
-      if (response.data.pending_tools && response.data.pending_tools.length > 0) {
-        setPendingHITL(response.data.pending_tools);
-        setIsStreaming(true);
-      } else {
-        setPendingHITL(null);
-      }
     } catch (error) {
       console.error('[ChatArea] Error fetching history:', error);
     } finally {
@@ -239,7 +231,6 @@ const ChatArea = ({ chatboxId }) => {
       setIsStreaming(false);
       setCurrentStreamText('');
       setStreamStatus('');
-      setPendingHITL(null);
       setToolLog([]);
       setCurrentStep('thinking');
       setActiveToolName('');
@@ -259,12 +250,10 @@ const ChatArea = ({ chatboxId }) => {
     setIsStreaming(true);
     setCurrentStreamText('');
     setStreamStatus('');
-    setPendingHITL(null);
     setCurrentStep('thinking');
     setActiveToolName('');
     startElapsedTimer();
 
-    let hitlTriggered = false;
     const token = localStorage.getItem('access_token');
 
     try {
@@ -332,11 +321,6 @@ const ChatArea = ({ chatboxId }) => {
                 finishToolEntry(event.run_id, event.output_preview, event.duration_ms, event.is_error);
                 break;
 
-              case 'hitl_approval_required':
-                setPendingHITL(event.tool_calls);
-                hitlTriggered = true;
-                break outer;
-
               case 'error':
                 setStreamStatus(`⚠️ Lỗi: ${event.content}`);
                 console.error('[SSE error event]', event.content);
@@ -349,24 +333,20 @@ const ChatArea = ({ chatboxId }) => {
       }
 
 
-      if (!hitlTriggered) {
-        setCurrentStep('done');
-        stopElapsedTimer();
-        await fetchHistory(true);
-      }
+      setCurrentStep('done');
+      stopElapsedTimer();
+      await fetchHistory(true);
 
     } catch (error) {
       console.error('[ChatArea] Stream error:', error);
       setStreamStatus('⚠️ Đã xảy ra lỗi khi kết nối.');
       stopElapsedTimer();
     } finally {
-      if (!hitlTriggered) {
-        setIsStreaming(false);
-        setCurrentStreamText('');
-        setStreamStatus('');
-        setCurrentStep('thinking');
-        setActiveToolName('');
-      }
+      setIsStreaming(false);
+      setCurrentStreamText('');
+      setStreamStatus('');
+      setCurrentStep('thinking');
+      setActiveToolName('');
     }
   };
 
@@ -380,12 +360,6 @@ const ChatArea = ({ chatboxId }) => {
     setToolLog([]);
     setMessages(prev => [...prev, { role: 'user', content: messageText, id: Date.now() }]);
     await processStream(`/chat/${chatboxId}/stream?prompt=${encodeURIComponent(messageText)}`, selectedFileIds);
-  };
-
-  const handleHITLComplete = async (payload) => {
-    setPendingHITL(null);
-    setStreamStatus('Đang gửi phản hồi của bạn…');
-    await processStream(`/chat/${chatboxId}/approve`, payload);
   };
 
   // ---------------------------------------------------------------------------
@@ -476,15 +450,6 @@ const ChatArea = ({ chatboxId }) => {
                   <Loader2 size={14} className="animate-spin inline-block mr-1" />
                   {streamStatus}
                 </div>
-              )}
-
-              {/* HITL */}
-              {pendingHITL && (
-                <HITLApproval
-                  chatboxId={chatboxId}
-                  toolCalls={pendingHITL}
-                  onComplete={handleHITLComplete}
-                />
               )}
             </div>
           </div>

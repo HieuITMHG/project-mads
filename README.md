@@ -109,20 +109,41 @@ Bạn đã có thể truy cập domain của mình.
 
 ---
 
-## Các vấn đề hiện tại
+## Cấu trúc Branch (Branch Structure)
 
-* Do mình sử dụng mình sử dụng Openai API nên không thể để user vào demo và spam hết token được, do đó app sẽ không có phần đăng ký người dùng trên giao diện, và phần hướng dẫn desploy chỉ để tham khảo và hoàn toàn không nên để web chạy lâu dài, sau khi demo xong nên xóa ngay. Bạn có thể tạo demo user bằng cách
+Dự án hiện tại đang được rẽ nhánh thành 2 kiến trúc Agent khác nhau để thử nghiệm:
 
-```bash
-curl.exe -X POST "https://suvitech.io.vn/api/register" `
-  -H "accept: application/json" `
-  -H "Content-Type: application/json" `
-  --data-raw '{\"username\":\"your_user_name\",\"password\":\"123456\"}'
-```
+1. **Nhánh `master` (Human-in-the-Loop - Single Agent):** 
+   - Sử dụng một Agent duy nhất ôm đồm tất cả các Tools.
+   - **Ưu điểm:** Hỗ trợ tính năng Human-in-the-Loop (HITL) hoàn hảo. Hệ thống có thể dừng lại `interrupt_before=["tools"]` để chờ người dùng duyệt lệnh SQL hoặc Python trước khi thực thi.
+   - **Nhược điểm:** LLM dễ bị quá tải khi phải quản lý quá nhiều công cụ cùng lúc, dẫn đến suy luận sai hoặc chọn nhầm công cụ.
 
-Người khác có thể tạo user bằng cách tương tự và spam hết token của bạn.
+2. **Nhánh `dev-multi_agent_v2` (Multi-Agent Supervisor - No HITL):**
+   - Thiết kế theo mô hình phân cấp: Có một `Supervisor Agent` đóng vai trò quản lý, phân phát nhiệm vụ (Delegate) cho các chuyên gia như `SQL_Agent` và `Analyst_Agent`.
+   - **Ưu điểm:** Khả năng suy luận vượt trội. Từng Sub-agent chỉ tập trung vào một nhiệm vụ duy nhất (viết SQL hoặc viết Python), giảm thiểu tối đa hiện tượng ảo giác (hallucination) của LLM. Có cơ chế tự động fix lỗi và retry cục bộ.
+   - **Nhược điểm & Khó khăn về mặt Kiến trúc:** Hiện tại nhánh này **chưa có cơ chế Human-in-the-Loop**. 
+     - *Nguyên nhân:* Trong LangGraph, cơ chế `interrupt_before` chỉ bắt được Node ở ngay cấp độ (level) của Graph hiện tại. Với kiến trúc Multi-Agent Supervisor, các Tools thực sự được bọc kín (encapsulated) sâu bên trong các Sub-graphs (như `sql_graph`, `analyst_graph`). 
+     - Lớp Main Graph (chứa Supervisor) hoàn toàn không nhìn thấy các Tool Node này để mà đặt cờ `interrupt`.
+     - Để ép buộc HITL hoạt động, ta sẽ phải ném State của toàn bộ các Sub-graph ra bên ngoài để Main Graph quản lý, điều này phá vỡ hoàn toàn tính đóng gói (encapsulation) của hướng đối tượng và làm logic lưu trữ State (trên REST API) trở nên cực kỳ rườm rà.
 
+---
 
+## Các Câu hỏi Mẫu để Kiểm thử (Sample Prompts)
 
+Dưới đây là một số câu hỏi mẫu từ các cấp độ khác nhau để bạn có thể sao chép và kiểm thử sức mạnh của hệ thống:
 
+**1. Truy vấn Dữ liệu Cơ bản (Database Extraction):**
+> "Please calculate the total revenue of the Olist system and the total number of successfully delivered orders (status 'delivered'). Format the currency for readability."
 
+**2. Vẽ Biểu đồ Trực quan (Charting Capabilities):**
+> "I want a visual representation. Fetch the top 10 cities with the highest number of orders from the database and draw a Bar Chart using Plotly to display this data. Use a professional color scheme for the chart."
+
+**3. Đọc hiểu File đính kèm (Process Uploaded Files):**
+> *(Nhớ đính kèm một file Excel/CSV chứa dữ liệu reviews vào chat)*
+> "Based on the reviews dataset I just attached to this chat session, draw a distribution chart (Histogram or Bar chart) counting the occurrences of each review score (review_score from 1 to 5)."
+
+**4. Phân tích Chuyên sâu (Multi-Agent Reasoning Combo):**
+> "Act as a Data Analysis Expert. I need a report on Olist's business performance by month for the year 2018.
+> 1. Query the database to calculate total revenue for each month.
+> 2. Draw a Line Chart showing the revenue trend.
+> 3. Based on the chart, write a short analysis (about 3-4 sentences) pointing out the best-performing month, any sluggish months, and provide your overall insights."
